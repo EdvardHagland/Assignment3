@@ -51,12 +51,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--input",
-        default="data/intermediate/sec_10k_risk_paragraphs.csv",
+        default="data/intermediate/processed/sec_10k_risk_paragraphs.csv",
         help="Path to the raw paragraph CSV from sec_fetch_risk_factors.py",
     )
     parser.add_argument(
         "--sections",
-        default="data/intermediate/sec_10k_risk_sections.csv",
+        default="data/intermediate/processed/sec_10k_risk_sections.csv",
         help="Path to the extracted section CSV used to enrich row metadata.",
     )
     parser.add_argument(

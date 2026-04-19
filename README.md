@@ -78,8 +78,8 @@ Main dataset:
 
 Supporting reproducibility files:
 
-- `data/intermediate/sec_10k_risk_sections.csv`
-- `data/intermediate/sec_10k_risk_paragraphs.csv`
+- `data/intermediate/processed/sec_10k_risk_sections.csv`
+- `data/intermediate/processed/sec_10k_risk_paragraphs.csv`
 - `data/intermediate/sec_10k_risk_cleaning_report.csv`
 
 Future training-data products will live in:
