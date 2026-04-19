@@ -1,4 +1,4 @@
-# Assignment 3 Scaffold
+# Assignment 3
 
 ## Project
 
@@ -24,7 +24,7 @@ Workflow:
 
 1. Download defense-firm `10-K` filings from the SEC.
 2. Extract `Item 1A. Risk Factors`.
-3. Split each section into risk-factor chunks.
+3. Split each section into paragraph-level units.
 4. Label a shared annotation sample using the team codebook.
 5. Measure overlap and resolve disagreements.
 6. Train a lightweight classifier on the final labels.
@@ -32,19 +32,16 @@ Workflow:
 8. Compare label frequencies across firms and years.
 9. Close-read representative chunks for interpretation.
 
-## Unit of analysis
+## Repository Structure
 
-The unit should be a **risk-factor chunk**, not a whole filing.
-
-This keeps the documents:
-
-- focused on risk
-- numerous enough for the assignment
-- large enough to be interpretable by human coders
-
-## Expected corpus shape
-
-If we start with `10` defense firms and pull `10-K` filings from `2022` onward, we should get a manageable filing set. After splitting the `Item 1A` sections into chunks, the corpus should comfortably pass the assignment's minimum document threshold.
+- `pipeline/`
+  - SEC scraper and corpus-cleaning scripts
+- `analysis/`
+  - proposal, annotation materials, and future notebooks
+- `config/`
+  - firm universe
+- `data/sec_defense_risk_corpus/processed/`
+  - canonical section, paragraph, and annotation-unit CSVs
 
 ## Initial firm universe
 
@@ -65,9 +62,9 @@ It includes large primes and a few smaller defense-focused firms:
 
 This list is intentionally editable. If you want a stricter "pure defense manufacturing" corpus, trim out the more services-heavy firms.
 
-## Annotation design
+## Annotation Design
 
-The annotation materials live in `annotation/`.
+The annotation materials live in `analysis/annotation/`.
 
 Suggested collaborative workflow:
 
@@ -79,24 +76,49 @@ Suggested collaborative workflow:
 
 See:
 
-- [annotation/codebook.md](/C:/Users/edvar/OneDrive/Skrivebord/Assignment%203/annotation/codebook.md)
-- [annotation/annotation_plan.md](/C:/Users/edvar/OneDrive/Skrivebord/Assignment%203/annotation/annotation_plan.md)
-- [annotation/labels_template.csv](/C:/Users/edvar/OneDrive/Skrivebord/Assignment%203/annotation/labels_template.csv)
+- [codebook.md](/C:/Users/edvar/OneDrive/Skrivebord/Assignment%203/analysis/annotation/codebook.md)
+- [annotation_plan.md](/C:/Users/edvar/OneDrive/Skrivebord/Assignment%203/analysis/annotation/annotation_plan.md)
+- [labels_template.csv](/C:/Users/edvar/OneDrive/Skrivebord/Assignment%203/analysis/annotation/labels_template.csv)
 
-## SEC ingestion
+## Pipeline
 
-The starter SEC pipeline is in [scripts/sec_fetch_risk_factors.py](/C:/Users/edvar/OneDrive/Skrivebord/Assignment%203/scripts/sec_fetch_risk_factors.py).
+The SEC extraction pipeline is in [sec_fetch_risk_factors.py](/C:/Users/edvar/OneDrive/Skrivebord/Assignment%203/pipeline/sec_fetch_risk_factors.py).
 
-It is designed to:
+The annotation-unit cleaner is in [prepare_annotation_paragraphs.py](/C:/Users/edvar/OneDrive/Skrivebord/Assignment%203/pipeline/prepare_annotation_paragraphs.py).
+
+The pipeline is designed to:
 
 1. resolve tickers to CIKs using SEC data
 2. fetch company submissions metadata
 3. download `10-K` filings
 4. extract `Item 1A. Risk Factors`
-5. split the section into chunks
-6. write section and chunk CSVs for annotation
+5. split the section into paragraphs
+6. enrich and clean those paragraphs into annotation-ready units
 
-The script uses only the Python standard library.
+Both scripts use only the Python standard library.
+
+## Canonical Outputs
+
+The canonical processed corpus lives in `data/sec_defense_risk_corpus/processed/`:
+
+- [sec_10k_risk_sections.csv](/C:/Users/edvar/OneDrive/Skrivebord/Assignment%203/data/sec_defense_risk_corpus/processed/sec_10k_risk_sections.csv)
+- [sec_10k_risk_paragraphs.csv](/C:/Users/edvar/OneDrive/Skrivebord/Assignment%203/data/sec_defense_risk_corpus/processed/sec_10k_risk_paragraphs.csv)
+- [sec_10k_risk_annotation_units.csv](/C:/Users/edvar/OneDrive/Skrivebord/Assignment%203/data/sec_defense_risk_corpus/processed/sec_10k_risk_annotation_units.csv)
+- [sec_10k_risk_cleaning_report.csv](/C:/Users/edvar/OneDrive/Skrivebord/Assignment%203/data/sec_defense_risk_corpus/processed/sec_10k_risk_cleaning_report.csv)
+
+The cleaned dataset now includes filing-level metadata such as:
+
+- `ticker`
+- `company_name`
+- `cik`
+- `filing_date`
+- `filing_year`
+- `period_bucket`
+- `accession_number`
+- `primary_document`
+- `source_url`
+- `merge_type`
+- source paragraph identifiers and indices
 
 ## Quick start
 
@@ -104,14 +126,15 @@ Set a SEC-compliant user agent and run:
 
 ```powershell
 $env:SEC_USER_AGENT="Your Name your.email@example.com"
-python scripts/sec_fetch_risk_factors.py --start-year 2022
+python pipeline/sec_fetch_risk_factors.py --start-year 2018
+python pipeline/prepare_annotation_paragraphs.py
 ```
 
-The script will write output under `data/`.
+The pipeline will write output under `data/sec_defense_risk_corpus/processed/`.
 
 ## Next recommended steps
 
-1. Run the SEC extraction script and inspect the chunk quality.
+1. Review the current annotation-unit schema and decide whether bullet lists should be split into separate risk claims.
 2. Trim the firm list if the corpus feels too broad.
-3. Pilot-label `100-150` chunks with all five annotators.
+3. Pilot-label `100-150` annotation units with all five annotators.
 4. Revise the codebook before the main annotation round.
