@@ -1,0 +1,92 @@
+[
+  {
+    "slug": "GOV_BUDGET_PROCUREMENT",
+    "display_name": "Government demand, budgets, procurement",
+    "description": "Appropriations, defense budgets, program funding, awards, recompetes, customer concentration, or federal spending priorities.",
+    "sort_order": 1
+  },
+  {
+    "slug": "CONTRACT_EXECUTION_ECONOMICS",
+    "display_name": "Contract execution and economics",
+    "description": "Cost overruns, fixed-price exposure, delays, performance obligations, warranty, termination risk, or contract-margin compression.",
+    "sort_order": 2
+  },
+  {
+    "slug": "SUPPLY_CHAIN_INDUSTRIAL_BASE",
+    "display_name": "Supply chain and industrial base",
+    "description": "Suppliers, subcontractors, components, shortages, lead times, sole-source dependencies, manufacturing capacity, quality, or logistics.",
+    "sort_order": 3
+  },
+  {
+    "slug": "LABOR_CLEARANCES_HUMAN_CAPITAL",
+    "display_name": "Labor, talent, clearances",
+    "description": "Hiring, retention, engineers, scientists, unions, strikes, key personnel, or security-clearance constraints.",
+    "sort_order": 4
+  },
+  {
+    "slug": "CYBER_DATA_SYSTEMS",
+    "display_name": "Cyber, data, systems",
+    "description": "Cyberattacks, ransomware, data breaches, IT outages, CMMC, NIST, privacy, or customer and supplier network security.",
+    "sort_order": 5
+  },
+  {
+    "slug": "LEGAL_REGULATORY_COMPLIANCE",
+    "display_name": "Legal, regulatory, compliance",
+    "description": "Litigation, investigations, procurement-law compliance, FCPA, audits, classified information, suspension, debarment, or general regulatory exposure.",
+    "sort_order": 6
+  },
+  {
+    "slug": "GEOPOLITICAL_INTL_SANCTIONS_EXPORT",
+    "display_name": "Geopolitical, international, sanctions, export",
+    "description": "Russia or Ukraine, China, Taiwan, Middle East, sanctions, export controls, tariffs, international sales, or political instability.",
+    "sort_order": 7
+  },
+  {
+    "slug": "MACRO_FINANCIAL_CAPITAL",
+    "display_name": "Macro, financial, capital",
+    "description": "Inflation, rates, SOFR, recession, debt, liquidity, taxes, pensions, insurance, impairment, or capital-market access.",
+    "sort_order": 8
+  },
+  {
+    "slug": "TECH_PRODUCT_AI_AUTONOMY",
+    "display_name": "Technology, product, AI, autonomy",
+    "description": "AI, autonomy, unmanned systems, drones, obsolescence, R&D, advanced technologies, or technological competition.",
+    "sort_order": 9
+  },
+  {
+    "slug": "IP_PROPRIETARY_RIGHTS",
+    "display_name": "IP and proprietary rights",
+    "description": "Patents, trade secrets, infringement, proprietary technology protection, or IP disputes.",
+    "sort_order": 10
+  },
+  {
+    "slug": "M_AND_A_PORTFOLIO_STRATEGY",
+    "display_name": "M&A and portfolio strategy",
+    "description": "Acquisitions, divestitures, joint ventures, integration risk, restructuring, synergies, or portfolio changes.",
+    "sort_order": 11
+  },
+  {
+    "slug": "ENV_CLIMATE_ESG_SAFETY",
+    "display_name": "Environment, climate, ESG, safety",
+    "description": "Climate change, emissions, ESG, remediation, hazardous materials, natural disasters, or workplace safety.",
+    "sort_order": 12
+  },
+  {
+    "slug": "GOVERNANCE_SECURITIES_STOCK",
+    "display_name": "Governance, securities, stock",
+    "description": "Stock volatility, securities litigation, internal controls, takeover defenses, shareholder rights, or public-company governance.",
+    "sort_order": 13
+  },
+  {
+    "slug": "PANDEMIC_PUBLIC_HEALTH",
+    "display_name": "Pandemic and public health",
+    "description": "COVID, pandemic recurrence, public-health restrictions, vaccine mandates, or lockdown-type disruption.",
+    "sort_order": 14
+  },
+  {
+    "slug": "OTHER_UNCLEAR",
+    "display_name": "Other or unclear",
+    "description": "Use sparingly for rows that do not fit the codebook cleanly. These rows should be reviewed in recycle and may be excluded later.",
+    "sort_order": 15
+  }
+]

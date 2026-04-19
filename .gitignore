@@ -1,3 +1,6 @@
 __pycache__/
 *.pyc
 data/processed/
+data/sec_defense_risk_corpus/
+data/fine_tuning/*.sqlite3
+data/fine_tuning/exports/

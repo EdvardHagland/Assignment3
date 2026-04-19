@@ -1,12 +1,11 @@
 # Analysis
 
-This folder is for the interpretation side of the project rather than the corpus-building side.
+This folder is for interpretation and presentation work.
 
-Suggested contents:
+Expected contents:
 
-- proposal and framing
-- annotation materials
+- project framing and proposal
 - exploratory notebooks
-- agreement checks
+- agreement analysis
 - classification notebooks
-- figures and tables for the presentation
+- figures and tables

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% set title = "Annotate" %}
+
+{% block content %}
+<section class="panel">
+  <div class="meta-grid">
+    <div><span class="label">Annotator</span><strong>{{ annotator.email }}</strong></div>
+  </div>
+  <div class="progress">
+    <span>Submitted: {{ progress.submitted_count }}</span>
+  </div>
+</section>
+
+<section class="panel text-panel">
+  <h2>Text to label</h2>
+  <div class="text-box">{{ assignment.text }}</div>
+</section>
+
+<section class="panel">
+  <form method="post" class="stack" id="label-form">
+    <input type="hidden" name="assignment_id" value="{{ assignment.assignment_id }}">
+
+    <fieldset class="fieldset">
+      <legend>Primary label</legend>
+      <div class="options">
+        {% for option in label_options %}
+          <label class="option-card">
+            <input type="radio" name="primary_label" value="{{ option.slug }}" data-autosubmit="true">
+            <div>
+              <strong>{{ option.display_name }}</strong>
+              <p>{{ option.description }}</p>
+            </div>
+          </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+  </form>
+</section>
+
+<script>
+  (function () {
+    const form = document.getElementById('label-form');
+    if (!form) return;
+    const radios = form.querySelectorAll('input[data-autosubmit="true"]');
+    radios.forEach((radio) => {
+      radio.addEventListener('change', () => {
+        form.requestSubmit();
+      });
+    });
+  })();
+</script>
+{% endblock %}

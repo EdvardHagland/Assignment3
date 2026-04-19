@@ -6,119 +6,87 @@
 
 **Core question:** Which kinds of strategic risk dominate defense-sector risk disclosures after 2022, and how do those patterns vary across firms and over time?
 
-## Why this corpus works
+**Main comparison window:** `2018-2021` versus `2022-2025`
 
-This project uses the SEC's structured filing system rather than scraping arbitrary company websites. The core corpus is:
+## Repository structure
 
-- U.S.-listed defense firms
+- `scraper/`
+  - SEC scraping and cleaning scripts
+- `data/intermediate/`
+  - extracted sections, raw paragraphs, and cleaning reports
+- `data/final/`
+  - the one canonical analysis dataset
+- `data/fine_tuning/`
+  - annotation and training-data artifacts built from the final corpus
+- `fine_tuning/`
+  - labeling workflow overview
+- `fine_tuning/labeling/`
+  - the annotation app, config, protocol, codebook, and labeling scripts in one place
+- `analysis/`
+  - proposal, notebooks, figures, and interpretation
+- `config/`
+  - firm universe and project configuration
+
+## Corpus logic
+
+This project uses the SEC's structured EDGAR system rather than arbitrary investor-relations pages. The corpus is limited to:
+
+- U.S.-listed defense firms across a prime and supplier layer
 - annual `10-K` filings
 - only `Item 1A. Risk Factors`
 
-That gives us a formally defined risk corpus instead of "everything companies say." We are not trying to infer risk from the whole filing. We are analyzing the legally designated risk-disclosure section.
+That keeps the corpus tied to a clearly defined disclosure regime instead of mixing together unrelated corporate text. The company universe now carries `company_layer` metadata so we can compare prime contractors against upstream suppliers without maintaining separate corpora.
 
-## Proposed method
+## Cleaning logic
 
-The main method should be **manual coding plus supervised classification**, not clustering as the main engine.
+The cleaner moves from filing text to annotation-ready risk claims in several passes:
 
-Workflow:
+1. extract `Item 1A` using filing structure rather than keyword guesses
+2. remove filing noise such as repeated headings, page-number debris, and table-of-contents artifacts
+3. merge broken line wraps and short heading-body pairs
+4. drop generic risk-summary material when it duplicates fuller discussion later in the section
+5. split bullet lists into separate rows when each bullet functions as its own risk claim
 
-1. Download defense-firm `10-K` filings from the SEC.
-2. Extract `Item 1A. Risk Factors`.
-3. Split each section into paragraph-level units.
-4. Label a shared annotation sample using the team codebook.
-5. Measure overlap and resolve disagreements.
-6. Train a lightweight classifier on the final labels.
-7. Apply the classifier to the full corpus.
-8. Compare label frequencies across firms and years.
-9. Close-read representative chunks for interpretation.
+The bullet-list split matters because many firms introduce a lead sentence and then enumerate distinct risks underneath it. In the final dataset, each bullet becomes its own row while the shared lead context is carried forward into the cleaned text.
 
-## Repository Structure
+## Fine-tuning and labeling logic
 
-- `pipeline/`
-  - SEC scraper and corpus-cleaning scripts
-- `analysis/`
-  - proposal, annotation materials, and future notebooks
-- `config/`
-  - firm universe
-- `data/sec_defense_risk_corpus/processed/`
-  - canonical section, paragraph, and annotation-unit CSVs
+We are treating the training set as a proper collaborative annotation exercise.
 
-## Initial firm universe
+Important distinction:
 
-The starter firm list is in [config/defense_companies.csv](/C:/Users/edvar/OneDrive/Skrivebord/Assignment%203/config/defense_companies.csv).
+- the full SEC corpus stays intact as the main analysis dataset
+- the annotation pool is a sampled subset drawn from that corpus
+- the supervised train, validation, and test splits should be created inside the labeled subset later
 
-It includes large primes and a few smaller defense-focused firms:
+So no, we do not need to delete labeled rows from the original corpus. We just need to track which rows were sampled for annotation and which labeled rows eventually become part of the supervised dataset.
 
-- Lockheed Martin
-- RTX
-- Northrop Grumman
-- General Dynamics
-- L3Harris
-- Huntington Ingalls
-- Leidos
-- Booz Allen Hamilton
-- Kratos
-- AeroVironment
+Rules:
 
-This list is intentionally editable. If you want a stricter "pure defense manufacturing" corpus, trim out the more services-heavy firms.
+1. no item is single-coded
+2. every item is labeled by at least `2` annotators
+3. disagreements go back into the queue for another labeling round
+4. items with persistent disagreement are dropped from the final training set
 
-## Annotation Design
+The goal is not to keep every row at all costs. The goal is to keep only rows that produce a reliable supervised dataset.
 
-The annotation materials live in `analysis/annotation/`.
+## Current canonical dataset
 
-Suggested collaborative workflow:
+Main dataset:
 
-1. Label a shared pilot sample with all five coders.
-2. Refine the codebook where disagreement is high.
-3. Double-code the main sample.
-4. Adjudicate conflicts.
-5. Train on the adjudicated labels.
+- `data/final/sec_defense_risk_dataset.csv`
 
-See:
+Supporting reproducibility files:
 
-- [codebook.md](/C:/Users/edvar/OneDrive/Skrivebord/Assignment%203/analysis/annotation/codebook.md)
-- [annotation_plan.md](/C:/Users/edvar/OneDrive/Skrivebord/Assignment%203/analysis/annotation/annotation_plan.md)
-- [labels_template.csv](/C:/Users/edvar/OneDrive/Skrivebord/Assignment%203/analysis/annotation/labels_template.csv)
+- `data/intermediate/sec_10k_risk_sections.csv`
+- `data/intermediate/sec_10k_risk_paragraphs.csv`
+- `data/intermediate/sec_10k_risk_cleaning_report.csv`
 
-## Pipeline
+Future training-data products will live in:
 
-The SEC extraction pipeline is in [sec_fetch_risk_factors.py](/C:/Users/edvar/OneDrive/Skrivebord/Assignment%203/pipeline/sec_fetch_risk_factors.py).
+- `data/fine_tuning/`
 
-The annotation-unit cleaner is in [prepare_annotation_paragraphs.py](/C:/Users/edvar/OneDrive/Skrivebord/Assignment%203/pipeline/prepare_annotation_paragraphs.py).
-
-The pipeline is designed to:
-
-1. resolve tickers to CIKs using SEC data
-2. fetch company submissions metadata
-3. download `10-K` filings
-4. extract `Item 1A. Risk Factors`
-5. split the section into paragraphs
-6. enrich and clean those paragraphs into annotation-ready units
-
-Both scripts use only the Python standard library.
-
-## Canonical Outputs
-
-The canonical processed corpus lives in `data/sec_defense_risk_corpus/processed/`:
-
-- [sec_10k_risk_sections.csv](/C:/Users/edvar/OneDrive/Skrivebord/Assignment%203/data/sec_defense_risk_corpus/processed/sec_10k_risk_sections.csv)
-- [sec_10k_risk_paragraphs.csv](/C:/Users/edvar/OneDrive/Skrivebord/Assignment%203/data/sec_defense_risk_corpus/processed/sec_10k_risk_paragraphs.csv)
-- [sec_10k_risk_annotation_units.csv](/C:/Users/edvar/OneDrive/Skrivebord/Assignment%203/data/sec_defense_risk_corpus/processed/sec_10k_risk_annotation_units.csv)
-- [sec_10k_risk_cleaning_report.csv](/C:/Users/edvar/OneDrive/Skrivebord/Assignment%203/data/sec_defense_risk_corpus/processed/sec_10k_risk_cleaning_report.csv)
-
-The cleaned dataset now includes filing-level metadata such as:
-
-- `ticker`
-- `company_name`
-- `cik`
-- `filing_date`
-- `filing_year`
-- `period_bucket`
-- `accession_number`
-- `primary_document`
-- `source_url`
-- `merge_type`
-- source paragraph identifiers and indices
+The local annotation database also lives there, because the app is meant to run from your laptop while ngrok exposes it outward.
 
 ## Quick start
 
@@ -126,15 +94,30 @@ Set a SEC-compliant user agent and run:
 
 ```powershell
 $env:SEC_USER_AGENT="Your Name your.email@example.com"
-python pipeline/sec_fetch_risk_factors.py --start-year 2018
-python pipeline/prepare_annotation_paragraphs.py
+python scraper/sec_fetch_risk_factors.py --start-year 2018
+python scraper/prepare_annotation_paragraphs.py
 ```
 
-The pipeline will write output under `data/sec_defense_risk_corpus/processed/`.
+Then build and serve the annotation workflow:
 
-## Next recommended steps
+```powershell
+python fine_tuning/labeling/scripts/build_annotation_pool.py
+python fine_tuning/labeling/scripts/init_annotation_db.py --reset
+python fine_tuning/labeling/run_annotation_app.py
+```
 
-1. Review the current annotation-unit schema and decide whether bullet lists should be split into separate risk claims.
-2. Trim the firm list if the corpus feels too broad.
-3. Pilot-label `100-150` annotation units with all five annotators.
-4. Revise the codebook before the main annotation round.
+If you want to expose it over ngrok, point ngrok at the local Flask port after the app is running.
+
+For backend visibility:
+
+- app dashboard: `http://127.0.0.1:5000/admin`
+- local database file: `data/fine_tuning/annotation.sqlite3`
+- label definitions: `fine_tuning/labeling/config/label_options.json`
+
+The annotator interface is intentionally minimal: users register with an email, see only the text, click one label, and the app advances immediately to the next item.
+
+The current annotation scheme uses `15` defense-specific risk categories. The only catch-all class is `OTHER_UNCLEAR`, which should be used sparingly and treated as a recycle signal rather than a final analytical category.
+
+## Next step
+
+The structure is now organized around scraping, one canonical corpus, and one explicit fine-tuning workflow. The next job is to build the fine-tuning dataset from the final corpus without breaking the double-label protocol.

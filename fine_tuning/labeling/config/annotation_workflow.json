@@ -1,0 +1,20 @@
+{
+  "source_dataset": "data/final/sec_defense_risk_dataset.csv",
+  "annotation_pool_output": "data/fine_tuning/annotation_pool.csv",
+  "database_path": "data/fine_tuning/annotation.sqlite3",
+  "exports_dir": "data/fine_tuning/exports",
+  "label_options": "fine_tuning/labeling/config/label_options.json",
+  "comparison_windows": [
+    "pre_2018_2021",
+    "post_2022_2025"
+  ],
+  "sample": {
+    "pilot_rows_per_company_year": 1,
+    "main_rows_per_company_year": 5,
+    "pilot_required_labels": 6,
+    "main_required_labels": 2,
+    "min_text_chars": 80,
+    "seed": 42,
+    "consensus_threshold_fraction": 0.67
+  }
+}

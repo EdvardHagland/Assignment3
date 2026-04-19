@@ -1,11 +1,35 @@
-ticker,company_name,notes
-LMT,Lockheed Martin Corporation,Large defense prime
-RTX,RTX Corporation,Large defense and aerospace prime
-NOC,Northrop Grumman Corporation,Large defense prime
-GD,General Dynamics Corporation,Large defense prime
-LHX,L3Harris Technologies Inc.,Large defense prime
-HII,Huntington Ingalls Industries Inc.,Naval defense contractor
-LDOS,Leidos Holdings Inc.,Defense and government services
-BAH,Booz Allen Hamilton Holding Corporation,Defense and intelligence consulting
-KTOS,Kratos Defense & Security Solutions Inc.,Mid-sized defense contractor
-AVAV,AeroVironment Inc.,Defense drones and tactical systems
+ticker,company_name,company_layer,company_notes
+AVAV,"AeroVironment, Inc.",prime,Unmanned systems and loitering munitions; autonomy and drone risk language.
+BAH,Booz Allen Hamilton Holding Corporation,prime,Defense and intelligence consulting plus digital services comparator.
+BA,The Boeing Company,prime,"Major defense prime with program, fixed-price, and supply-chain exposure."
+CACI,CACI International Inc,prime,"Defense and intelligence IT, cyber, ISR, and mission systems."
+GD,General Dynamics Corporation,prime,"Major prime across land, naval, IT, and aerospace."
+HII,"Huntington Ingalls Industries, Inc.",prime,Naval shipbuilding and industrial-base capacity exposure.
+KBR,"KBR, Inc.",prime,"Mission engineering, logistics, government services, and support functions."
+KTOS,"Kratos Defense & Security Solutions, Inc.",prime,"Defense tech, drones, tactical systems, and emerging capability areas."
+LDOS,"Leidos Holdings, Inc.",prime,Large mission-IT and federal services benchmark.
+LHX,"L3Harris Technologies, Inc.",prime,"Major defense electronics, ISR, comms, and tactical systems."
+LMT,Lockheed Martin Corporation,prime,Major prime; baseline defense risk language for the sector.
+NOC,Northrop Grumman Corporation,prime,"Major prime with space, aerospace, and strategic systems exposure."
+PSN,Parsons Corporation,prime,"Defense and intelligence engineering, cyber, and geospatial exposure."
+RTX,RTX Corporation,prime,"Major prime across missiles, sensors, aerospace, and sustainment."
+SAIC,Science Applications International Corporation,prime,Large mission-services and federal IT comparator.
+TXT,Textron Inc.,prime,"Defense aviation, rotorcraft, and unmanned systems."
+VVX,"V2X, Inc.",prime,"Mission support, logistics, base operations, and sustainment risk."
+BWXT,"BWX Technologies, Inc.",prime,Naval nuclear and strategic industrial-base relevance.
+CW,Curtiss-Wright Corporation,prime,"Defense components, naval systems, and industrial supply-chain exposure."
+TDY,Teledyne Technologies Incorporated,prime,"Sensors, imaging, ISR, and defense electronics."
+MRCY,"Mercury Systems, Inc.",prime,Defense electronics and component/supply-chain stress case.
+IRDM,Iridium Communications Inc.,prime,Government satcom and resilience or space exposure.
+VSAT,"Viasat, Inc.",prime,"Government communications, satcom, and cyber or international risk."
+AIR,AAR Corp.,supplier,"Aviation services, sustainment, spares, and MRO exposure."
+ATI,ATI Inc.,supplier,Specialty materials and alloys; industrial-base constraint signal.
+CRS,Carpenter Technology Corporation,supplier,Specialty metals and materials; capacity and raw-material risk.
+DCO,Ducommun Incorporated,supplier,Components and electronics supplier to aerospace and defense.
+HEI,HEICO Corporation,supplier,Aerospace and defense parts and electronics supplier.
+HWM,Howmet Aerospace Inc.,supplier,Aerospace components and forged or engine-linked supply-chain exposure.
+HXL,Hexcel Corporation,supplier,Composites and materials; industrial bottleneck indicator.
+MOG.A,Moog Inc.,supplier,"Flight controls, motion control, and defense systems."
+TDG,TransDigm Group Incorporated,supplier,Components and pricing or supply-chain exposure.
+VSEC,VSE Corporation,supplier,"Distribution, maintenance, and fleet support."
+WWD,"Woodward, Inc.",supplier,Aerospace controls and subsystem supplier.
