@@ -402,6 +402,7 @@ def main() -> int:
 
     section_rows: List[dict] = []
     paragraph_rows: List[dict] = []
+    coverage_rows: List[dict] = []
     seen_ciks: Dict[str, str] = {}
 
     for company in companies:
@@ -412,6 +413,24 @@ def main() -> int:
         resolved_ticker, sec_entry = resolve_sec_entry(ticker, ticker_map)
         if not sec_entry:
             print(f"[warn] Could not resolve ticker {ticker}", file=sys.stderr)
+            coverage_rows.append(
+                {
+                    "ticker": ticker,
+                    "resolved_ticker": "",
+                    "company_name": company_name,
+                    "company_layer": company_layer,
+                    "company_notes": company_notes,
+                    "cik": "",
+                    "status": "unresolved_ticker",
+                    "duplicate_of": "",
+                    "matched_filings": 0,
+                    "extracted_sections": 0,
+                    "extracted_paragraphs": 0,
+                    "failed_extractions": 0,
+                    "failed_accessions": "",
+                    "extracted_accessions": "",
+                }
+            )
             continue
 
         cik = normalize_cik(sec_entry["cik_str"])
@@ -420,6 +439,24 @@ def main() -> int:
             print(
                 f"[warn] Skipping duplicate issuer {ticker} (CIK {cik}); already included as {prior_ticker}",
                 file=sys.stderr,
+            )
+            coverage_rows.append(
+                {
+                    "ticker": ticker,
+                    "resolved_ticker": resolved_ticker or ticker,
+                    "company_name": company_name,
+                    "company_layer": company_layer,
+                    "company_notes": company_notes,
+                    "cik": cik,
+                    "status": "duplicate_issuer",
+                    "duplicate_of": prior_ticker,
+                    "matched_filings": 0,
+                    "extracted_sections": 0,
+                    "extracted_paragraphs": 0,
+                    "failed_extractions": 0,
+                    "failed_accessions": "",
+                    "extracted_accessions": "",
+                }
             )
             continue
         seen_ciks[cik] = ticker
@@ -441,6 +478,11 @@ def main() -> int:
 
         print(f"[info] {ticker}: {len(matched)} {args.form} filings", file=sys.stderr)
 
+        extracted_sections = 0
+        extracted_paragraphs = 0
+        failed_accessions: List[str] = []
+        extracted_accessions: List[str] = []
+
         for filing in matched:
             accession_number = filing["accessionNumber"]
             primary_document = filing["primaryDocument"]
@@ -453,12 +495,15 @@ def main() -> int:
             time.sleep(args.sleep_seconds)
 
             if not risk_section:
+                failed_accessions.append(accession_number)
                 print(
                     f"[warn] No risk section extracted for {ticker} {accession_number}",
                     file=sys.stderr,
                 )
                 continue
 
+            extracted_sections += 1
+            extracted_accessions.append(accession_number)
             filing_id = f"{ticker}_{accession_number.replace('-', '')}"
             section_rows.append(
                 {
@@ -481,6 +526,7 @@ def main() -> int:
             )
 
             paragraphs = split_into_paragraphs(risk_section)
+            extracted_paragraphs += len(paragraphs)
             for paragraph in paragraphs:
                 paragraph_rows.append(
                     {
@@ -504,6 +550,34 @@ def main() -> int:
                         "text": paragraph["text"],
                     }
                 )
+
+        if not matched:
+            status = "no_matching_filings"
+        elif extracted_sections == 0:
+            status = "no_extracted_sections"
+        elif failed_accessions:
+            status = "partial"
+        else:
+            status = "ok"
+
+        coverage_rows.append(
+            {
+                "ticker": ticker,
+                "resolved_ticker": resolved_ticker or ticker,
+                "company_name": company_name,
+                "company_layer": company_layer,
+                "company_notes": company_notes,
+                "cik": cik,
+                "status": status,
+                "duplicate_of": "",
+                "matched_filings": len(matched),
+                "extracted_sections": extracted_sections,
+                "extracted_paragraphs": extracted_paragraphs,
+                "failed_extractions": len(failed_accessions),
+                "failed_accessions": "|".join(failed_accessions),
+                "extracted_accessions": "|".join(extracted_accessions),
+            }
+        )
 
     write_csv(
         output_dir / "processed" / "sec_10k_risk_sections.csv",
@@ -550,9 +624,29 @@ def main() -> int:
             "text",
         ],
     )
+    write_csv(
+        output_dir / "processed" / "sec_10k_risk_coverage_report.csv",
+        coverage_rows,
+        [
+            "ticker",
+            "resolved_ticker",
+            "company_name",
+            "company_layer",
+            "company_notes",
+            "cik",
+            "status",
+            "duplicate_of",
+            "matched_filings",
+            "extracted_sections",
+            "extracted_paragraphs",
+            "failed_extractions",
+            "failed_accessions",
+            "extracted_accessions",
+        ],
+    )
 
     print(
-        f"[done] Wrote {len(section_rows)} sections and {len(paragraph_rows)} paragraphs to {output_dir / 'processed'}",
+        f"[done] Wrote {len(section_rows)} sections, {len(paragraph_rows)} paragraphs, and {len(coverage_rows)} coverage rows to {output_dir / 'processed'}",
         file=sys.stderr,
     )
     return 0

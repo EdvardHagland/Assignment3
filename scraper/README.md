@@ -101,3 +101,13 @@ A few practical notes:
 - The universe is defense-focused, not a perfect legal taxonomy of "defense companies."
 - Some issuers have multiple share classes. The scraper normalizes ticker variants and skips duplicate issuers by `CIK`, so we keep one company rather than duplicating the same filing set.
 - Inclusion in the universe does not mean every firm produces equally clean `Item 1A` extraction. Some firms will still need extractor improvements.
+
+## Outputs
+
+The scraper stage writes three main files into `data/intermediate/processed/`:
+
+- `sec_10k_risk_sections.csv`
+- `sec_10k_risk_paragraphs.csv`
+- `sec_10k_risk_coverage_report.csv`
+
+The coverage report is especially useful for checking which configured companies were resolved cleanly, how many filings matched the date window, how many sections were extracted, and which accessions failed extraction.
