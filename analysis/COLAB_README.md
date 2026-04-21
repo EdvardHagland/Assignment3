@@ -145,3 +145,29 @@ The first exploratory pass is not meant to produce the final argument. It is mea
 3. Decide whether BERTopic is worth keeping as a supporting analysis.
 4. Use what we learn here to refine the manual codebook and later supervised classification.
 5. If the HTML report looks good, use it directly as a shareable exploratory artifact for the group.
+
+
+## Block 9: Run the CPU-only cluster shift diagnostics
+
+This pass does not touch embeddings. It re-ranks the saved clusters by relative movement, filters out company-dominated clusters, and computes within-cluster pre/post contrast terms from the saved sampled rows.
+
+```python
+!python analysis/exploratory_clustering/render_cluster_diagnostics.py     --cluster-summary analysis/exploratory_clustering/output/cluster_summary.csv     --sampled-rows analysis/exploratory_clustering/output/sampled_cluster_rows.csv     --representative-examples analysis/exploratory_clustering/output/representative_examples.csv     --output-html analysis/exploratory_clustering/output/cluster_shift_diagnostics.html     --output-csv analysis/exploratory_clustering/output/cluster_shift_diagnostics.csv     --output-contrast-csv analysis/exploratory_clustering/output/cluster_shift_contrasts.csv
+```
+
+This will write:
+
+- `analysis/exploratory_clustering/output/cluster_shift_diagnostics.html`
+- `analysis/exploratory_clustering/output/cluster_shift_diagnostics.csv`
+- `analysis/exploratory_clustering/output/cluster_shift_contrasts.csv`
+
+If you only have `cluster_summary.csv`, you can still run the script without `--sampled-rows`; it will still re-rank and flag concentrated clusters, but it will skip the within-cluster contrast terms.
+
+## Block 10: Download the diagnostics outputs
+
+```python
+from google.colab import files
+files.download("analysis/exploratory_clustering/output/cluster_shift_diagnostics.html")
+files.download("analysis/exploratory_clustering/output/cluster_shift_diagnostics.csv")
+files.download("analysis/exploratory_clustering/output/cluster_shift_contrasts.csv")
+```

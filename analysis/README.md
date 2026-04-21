@@ -17,5 +17,7 @@ Main analysis files:
   - custom report layout and styling for the compiled HTML output
 - [fix_standalone_html.py](/C:/Users/edvar/Assignment3/analysis/exploratory_clustering/fix_standalone_html.py)
   - repairs an already-generated HTML report so it works as a local standalone file
+- [render_cluster_diagnostics.py](/C:/Users/edvar/Assignment3/analysis/exploratory_clustering/render_cluster_diagnostics.py)
+  - CPU-only post-processing that re-ranks saved clusters by relative change, filters concentrated clusters, and computes within-cluster pre/post contrast terms
 
 The `DELETE_ME_` files under `analysis/exploratory_clustering/` are intentional scratch files. They are there to make early experimentation easy, and they can be removed once the final analysis workflow is clearer.

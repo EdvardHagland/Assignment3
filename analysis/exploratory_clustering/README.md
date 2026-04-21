@@ -23,3 +23,10 @@ The report pipeline can now generate:
 - a static PDF for safer sharing and presentation
 
 The `DELETE_ME_` files in this folder are intentional scratch files. They are here to make experimentation easy, and they can be removed once we know what belongs in the final analysis workflow.
+
+
+Secondary diagnostics pass:
+
+- [render_cluster_diagnostics.py](/C:/Users/edvar/Assignment3/analysis/exploratory_clustering/render_cluster_diagnostics.py)
+
+This pass is CPU-only and is meant for the moment when the first clustering report feels too boilerplate-heavy. It re-ranks clusters by relative movement, filters out company-dominated clusters, and adds within-cluster pre/post contrast terms from the saved sampled rows.
