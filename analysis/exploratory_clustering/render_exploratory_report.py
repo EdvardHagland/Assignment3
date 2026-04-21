@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import shorten
@@ -33,6 +34,9 @@ import umap
 
 PRE_PERIOD = "pre_2022"
 POST_PERIOD = "post_2022"
+FOCUS_MIN_CLUSTER_SIZE = 150
+FOCUS_MIN_TICKER_COUNT = 10
+FOCUS_MAX_TOP_TICKER_SHARE = 0.35
 
 
 @dataclass
@@ -259,6 +263,11 @@ def cluster_label(cluster_id: int) -> str:
     return f"C{cluster_id:02d}"
 
 
+def parse_top_ticker_n(top_tickers: str) -> int:
+    match = re.search(r"\((\d+)\)", str(top_tickers))
+    return int(match.group(1)) if match else 0
+
+
 def top_terms_by_cluster(df: pd.DataFrame, top_terms: int) -> Dict[int, str]:
     vectorizer = TfidfVectorizer(
         max_features=20000,
@@ -372,7 +381,31 @@ def build_cluster_summary(sampled_df: pd.DataFrame, top_term_map: Dict[int, str]
     summary = summary.merge(ticker_coverage, on=["cluster", "cluster_label"], how="left")
     summary = summary.merge(top_ticker_strings, on=["cluster", "cluster_label"], how="left")
     summary["top_terms"] = summary["cluster"].map(top_term_map)
-    summary = summary.sort_values(["cluster_size", "post_minus_pre"], ascending=[False, False]).reset_index(drop=True)
+    summary["top_ticker_n"] = summary["top_tickers"].map(parse_top_ticker_n)
+    summary["top_ticker_share"] = np.where(summary["cluster_size"] > 0, summary["top_ticker_n"] / summary["cluster_size"], np.nan)
+    summary["abs_delta"] = summary["post_minus_pre"].abs()
+    summary["sector_signal_score"] = (
+        summary["abs_delta"]
+        * np.log1p(summary["cluster_size"])
+        * np.log1p(summary["ticker_count"].clip(lower=1))
+        * (1 - summary["top_ticker_share"].fillna(1).clip(lower=0, upper=0.95))
+    )
+    summary["eligible_sector_shift"] = (
+        (summary["cluster"] != -1)
+        & (summary["cluster_size"] >= FOCUS_MIN_CLUSTER_SIZE)
+        & (summary["ticker_count"] >= FOCUS_MIN_TICKER_COUNT)
+        & (summary["top_ticker_share"] <= FOCUS_MAX_TOP_TICKER_SHARE)
+    )
+    summary["exclusion_reason"] = ""
+    summary.loc[summary["cluster"] == -1, "exclusion_reason"] = "noise"
+    summary.loc[(summary["cluster"] != -1) & (summary["cluster_size"] < FOCUS_MIN_CLUSTER_SIZE), "exclusion_reason"] = "too_small"
+    summary.loc[(summary["cluster"] != -1) & (summary["ticker_count"] < FOCUS_MIN_TICKER_COUNT), "exclusion_reason"] = "too_few_tickers"
+    summary.loc[(summary["cluster"] != -1) & (summary["top_ticker_share"] > FOCUS_MAX_TOP_TICKER_SHARE), "exclusion_reason"] = "too_concentrated"
+    summary.loc[summary["eligible_sector_shift"], "exclusion_reason"] = ""
+    summary = summary.sort_values(
+        ["eligible_sector_shift", "sector_signal_score", "abs_delta", "cluster_size"],
+        ascending=[False, False, False, False],
+    ).reset_index(drop=True)
     return summary
 
 
@@ -395,6 +428,21 @@ def corpus_overview_figure(df: pd.DataFrame, template_name: str) -> go.Figure:
     )
     fig.update_layout(height=440)
     return fig
+
+
+def select_focus_clusters(cluster_summary_df: pd.DataFrame, top_clusters: int) -> pd.DataFrame:
+    eligible = cluster_summary_df[
+        (cluster_summary_df["cluster"] != -1) & (cluster_summary_df["eligible_sector_shift"])
+    ].copy()
+    if len(eligible) < top_clusters:
+        eligible = cluster_summary_df[cluster_summary_df["cluster"] != -1].copy()
+
+    return (
+        eligible.sort_values(["sector_signal_score", "abs_delta", "cluster_size"], ascending=[False, False, False])
+        .head(top_clusters)
+        .sort_values("post_minus_pre", ascending=False)
+        .copy()
+    )
 
 
 def sample_mix_figure(sampled_df: pd.DataFrame, template_name: str) -> go.Figure:
@@ -465,13 +513,7 @@ def umap_cluster_figure(display_df: pd.DataFrame, template_name: str) -> go.Figu
 
 
 def cluster_year_heatmap(sampled_df: pd.DataFrame, cluster_summary_df: pd.DataFrame, top_clusters: int, template_name: str) -> go.Figure:
-    top_labels = (
-        cluster_summary_df[cluster_summary_df["cluster"] != -1]
-        .assign(abs_delta=lambda x: x["post_minus_pre"].abs())
-        .sort_values(["abs_delta", "cluster_size"], ascending=[False, False])
-        .head(top_clusters)["cluster_label"]
-        .tolist()
-    )
+    top_labels = select_focus_clusters(cluster_summary_df, top_clusters)["cluster_label"].tolist()
     heatmap_df = sampled_df[sampled_df["cluster_label"].isin(top_labels)].copy()
     heatmap_df = (
         heatmap_df.groupby(["cluster_label", "filing_year"])
@@ -497,13 +539,7 @@ def cluster_year_heatmap(sampled_df: pd.DataFrame, cluster_summary_df: pd.DataFr
 
 
 def cluster_period_figure(cluster_summary_df: pd.DataFrame, top_clusters: int, template_name: str) -> go.Figure:
-    top_df = (
-        cluster_summary_df[cluster_summary_df["cluster"] != -1]
-        .assign(abs_delta=lambda x: x["post_minus_pre"].abs())
-        .sort_values("abs_delta", ascending=False)
-        .head(top_clusters)
-        .sort_values("post_minus_pre", ascending=False)
-    )
+    top_df = select_focus_clusters(cluster_summary_df, top_clusters)
 
     plot_df = top_df.melt(
         id_vars=["cluster_label"],
@@ -526,7 +562,7 @@ def cluster_period_figure(cluster_summary_df: pd.DataFrame, top_clusters: int, t
 
 
 def cluster_layer_figure(cluster_summary_df: pd.DataFrame, top_clusters: int, template_name: str) -> go.Figure:
-    top_df = cluster_summary_df[cluster_summary_df["cluster"] != -1].sort_values("cluster_size", ascending=False).head(top_clusters)
+    top_df = select_focus_clusters(cluster_summary_df, top_clusters)
     value_cols = [col for col in ["prime", "supplier"] if col in top_df.columns]
     plot_df = top_df.melt(
         id_vars=["cluster_label"],
@@ -552,34 +588,67 @@ def render_plot(fig: go.Figure) -> str:
     return fig.to_html(full_html=False, include_plotlyjs=False, config={"displayModeBar": False, "responsive": True})
 
 
+def build_examples_lookup(sampled_df: pd.DataFrame, representative_df: pd.DataFrame, max_examples: int = 3) -> Dict[int, List[dict]]:
+    lookup: Dict[int, List[dict]] = {}
+
+    if not representative_df.empty and {"cluster", "text", "ticker"}.issubset(representative_df.columns):
+        for cluster_id, part in representative_df.groupby("cluster"):
+            examples = []
+            for _, rep in part.head(max_examples).iterrows():
+                examples.append(
+                    {
+                        "ticker": rep["ticker"],
+                        "company_layer": rep["company_layer"],
+                        "filing_year": int(rep["filing_year"]),
+                        "period_bucket": rep["period_bucket"],
+                        "text": shorten(rep["text"], width=340, placeholder="..."),
+                    }
+                )
+            lookup[int(cluster_id)] = examples
+
+    for cluster_id, part in sampled_df.groupby("cluster"):
+        cluster_id = int(cluster_id)
+        if cluster_id in lookup:
+            continue
+        examples = []
+        for period in [POST_PERIOD, PRE_PERIOD]:
+            period_part = part[part["period_bucket"] == period]
+            if period_part.empty:
+                continue
+            row = period_part.iloc[0]
+            examples.append(
+                {
+                    "ticker": row["ticker"],
+                    "company_layer": row["company_layer"],
+                    "filing_year": int(row["filing_year"]),
+                    "period_bucket": row["period_bucket"],
+                    "text": shorten(row["text"], width=340, placeholder="..."),
+                }
+            )
+            if len(examples) >= max_examples:
+                break
+        lookup[cluster_id] = examples
+
+    return lookup
+
+
 def build_cluster_cards(
-    cluster_summary_df: pd.DataFrame,
-    representative_df: pd.DataFrame,
-    top_clusters: int,
+    cluster_rows_df: pd.DataFrame,
+    examples_lookup: Dict[int, List[dict]],
 ) -> List[dict]:
-    top_clusters_df = (
-        cluster_summary_df[cluster_summary_df["cluster"] != -1]
-        .assign(abs_delta=lambda x: x["post_minus_pre"].abs())
-        .sort_values(["abs_delta", "cluster_size"], ascending=[False, False])
-        .head(top_clusters)
-        .copy()
-    )
     cluster_cards: List[dict] = []
-    for _, row in top_clusters_df.iterrows():
-        reps = representative_df[representative_df["cluster"] == row["cluster"]]
-        examples = [
-            {
-                "ticker": rep["ticker"],
-                "company_layer": rep["company_layer"],
-                "filing_year": int(rep["filing_year"]),
-                "period_bucket": rep["period_bucket"],
-                "text": shorten(rep["text"], width=340, placeholder="..."),
-            }
-            for _, rep in reps.iterrows()
-        ]
+    for _, row in cluster_rows_df.iterrows():
+        cluster_id = int(row["cluster"])
+        if cluster_id == -1:
+            status = "Noise"
+        elif row.get("eligible_sector_shift", False):
+            status = "Notable broad shift"
+        else:
+            status = f"Documented but filtered ({row.get('exclusion_reason', 'filtered')})"
         cluster_cards.append(
             {
                 "cluster_label": row["cluster_label"],
+                "cluster": cluster_id,
                 "cluster_size": int(row["cluster_size"]),
                 "ticker_count": int(row.get("ticker_count", 0)),
                 "top_tickers": row.get("top_tickers", ""),
@@ -589,7 +658,10 @@ def build_cluster_cards(
                 "delta": float(row["post_minus_pre"]),
                 "prime_share": float(row.get("prime", 0.0)),
                 "supplier_share": float(row.get("supplier", 0.0)),
-                "examples": examples,
+                "top_ticker_share": float(row.get("top_ticker_share", 0.0)),
+                "sector_signal_score": float(row.get("sector_signal_score", 0.0)),
+                "status": status,
+                "examples": examples_lookup.get(cluster_id, []),
             }
         )
     return cluster_cards
@@ -762,7 +834,13 @@ def build_pdf_report(
     doc.build(story)
 
 
-def render_report(args: argparse.Namespace, full_df: pd.DataFrame, artifacts: ReportArtifacts, cluster_cards: List[dict]) -> str:
+def render_report(
+    args: argparse.Namespace,
+    full_df: pd.DataFrame,
+    artifacts: ReportArtifacts,
+    cluster_cards: List[dict],
+    all_cluster_cards: List[dict],
+) -> str:
     template_path = Path(args.template)
     env = Environment(
         loader=FileSystemLoader(str(template_path.parent)),
@@ -779,6 +857,7 @@ def render_report(args: argparse.Namespace, full_df: pd.DataFrame, artifacts: Re
         summary=artifacts.summary_metrics,
         figures=artifacts.figures,
         cluster_cards=cluster_cards,
+        all_cluster_cards=all_cluster_cards,
         model_name=args.model_name,
         sample_per_period=args.sample_per_period,
         generated_from=str(Path(args.dataset).as_posix()),
@@ -815,7 +894,17 @@ def main() -> None:
     top_term_map = top_terms_by_cluster(sampled_df, args.top_terms)
     representative_df = representative_examples(sampled_df, embeddings, args.examples_per_cluster)
     cluster_summary_df = build_cluster_summary(sampled_df, top_term_map)
-    cluster_cards = build_cluster_cards(cluster_summary_df, representative_df, args.top_clusters)
+    examples_lookup = build_examples_lookup(sampled_df, representative_df, max_examples=args.examples_per_cluster)
+    focus_cluster_df = select_focus_clusters(cluster_summary_df, args.top_clusters)
+    cluster_cards = build_cluster_cards(focus_cluster_df, examples_lookup)
+    all_cluster_df = (
+        cluster_summary_df.sort_values(
+            ["eligible_sector_shift", "sector_signal_score", "abs_delta", "cluster_size"],
+            ascending=[False, False, False, False],
+        )
+        .copy()
+    )
+    all_cluster_cards = build_cluster_cards(all_cluster_df, examples_lookup)
 
     sampled_df.drop(columns=["text_preview"]).to_csv(artifacts_dir / "sampled_cluster_rows.csv", index=False)
     cluster_summary_df.to_csv(artifacts_dir / "cluster_summary.csv", index=False)
@@ -858,7 +947,7 @@ def main() -> None:
         summary_metrics=summary_metrics,
     )
 
-    html = render_report(args, full_df, report_artifacts, cluster_cards)
+    html = render_report(args, full_df, report_artifacts, cluster_cards, all_cluster_cards)
     output_html.write_text(html, encoding="utf-8")
 
     if output_pdf:

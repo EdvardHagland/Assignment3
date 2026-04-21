@@ -207,6 +207,15 @@
       white-space: nowrap;
     }
 
+    .cluster-status {
+      margin: 0 0 8px;
+      color: var(--accent);
+      font-size: 0.84rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
     .cluster-tags {
       margin: 0 0 14px;
       color: var(--muted);
@@ -280,6 +289,12 @@
       margin: 8px 0 0;
       font-size: 0.95rem;
       color: var(--ink);
+    }
+
+    .catalog-intro {
+      margin-bottom: 18px;
+      color: var(--muted);
+      max-width: 76ch;
     }
 
     .footer {
@@ -378,7 +393,7 @@
       <div class="section-header">
         <div>
           <h2>Highlighted clusters</h2>
-          <p>These are the most analytically promising clusters from the first exploratory pass. They are not final labels, but they do give us something concrete to inspect.</p>
+          <p>These are the most analytically promising broad-shift clusters from the first exploratory pass. The plots above stay the same; the change here is that we now foreground broader sector movers rather than just the biggest clusters.</p>
         </div>
       </div>
 
@@ -389,6 +404,7 @@
             <h3>{{ cluster.cluster_label }}</h3>
             <div class="cluster-size">{{ cluster.cluster_size }} sampled rows · {{ cluster.ticker_count }} tickers</div>
           </div>
+          <p class="cluster-status">{{ cluster.status }}</p>
           <p class="cluster-tags">{{ cluster.top_terms }}</p>
           {% if cluster.top_tickers %}
           <p class="cluster-tags"><strong>Top tickers:</strong> {{ cluster.top_tickers }}</p>
@@ -411,6 +427,57 @@
               <p>{{ example.text }}</p>
             </div>
             {% endfor %}
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <div>
+          <h2>Full cluster catalog</h2>
+          <p class="catalog-intro">This keeps every cluster visible for documentation. The notable broad movers come first, but we also keep filtered clusters and noise in view so nothing interesting disappears just because it was not selected for the headline section.</p>
+        </div>
+      </div>
+
+      <div class="clusters">
+        {% for cluster in all_cluster_cards %}
+        <article class="cluster-card">
+          <div class="cluster-head">
+            <h3>{{ cluster.cluster_label }}</h3>
+            <div class="cluster-size">{{ cluster.cluster_size }} sampled rows · {{ cluster.ticker_count }} tickers</div>
+          </div>
+          <p class="cluster-status">{{ cluster.status }}</p>
+          <p class="cluster-tags">{{ cluster.top_terms }}</p>
+          {% if cluster.top_tickers %}
+          <p class="cluster-tags"><strong>Top tickers:</strong> {{ cluster.top_tickers }}</p>
+          {% endif %}
+          <div class="delta {% if cluster.delta < 0 %}negative{% endif %}">
+            {% if cluster.delta >= 0 %}+{% endif %}{{ "%.1f"|format(cluster.delta * 100) }} percentage points post-minus-pre
+          </div>
+
+          <div class="shares">
+            <div class="share-box"><strong>Pre-2022 share</strong><span>{{ "%.1f"|format(cluster.pre_share * 100) }}%</span></div>
+            <div class="share-box"><strong>Post-2022 share</strong><span>{{ "%.1f"|format(cluster.post_share * 100) }}%</span></div>
+            <div class="share-box"><strong>Prime share</strong><span>{{ "%.1f"|format(cluster.prime_share * 100) }}%</span></div>
+            <div class="share-box"><strong>Supplier share</strong><span>{{ "%.1f"|format(cluster.supplier_share * 100) }}%</span></div>
+          </div>
+
+          <div class="examples">
+            {% if cluster.examples %}
+              {% for example in cluster.examples %}
+              <div class="example">
+                <div class="example-meta">{{ example.ticker }} · {{ example.company_layer }} · {{ example.filing_year }} · {{ example.period_bucket }}</div>
+                <p>{{ example.text }}</p>
+              </div>
+              {% endfor %}
+            {% else %}
+              <div class="example">
+                <div class="example-meta">No representative example saved</div>
+                <p>This cluster did not have a saved representative snippet in the current artifacts.</p>
+              </div>
+            {% endif %}
           </div>
         </article>
         {% endfor %}
