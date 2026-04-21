@@ -22,7 +22,8 @@
   - labeling workflow overview
 - `fine_tuning/labeling/`
   - the annotation app, config, protocol, codebook, and labeling scripts in one place
-- `analysis/`\n  - Colab launch guide, HTML report pipeline, notebooks, figures, and interpretation
+- `analysis/`
+  - Colab launch guide, exploratory report pipeline, diagnostics, figures, and interpretation
 - `config/`
   - firm universe and project configuration
 
@@ -127,8 +128,7 @@ For analysis preparation, start here:
 - `analysis/COLAB_README.md`
 - `analysis/exploratory_clustering/render_exploratory_report.py`
 - `analysis/exploratory_clustering/report_template.html.j2`
+- `analysis/exploratory_clustering/render_cluster_diagnostics.py`
 - `analysis/exploratory_clustering/`
-
-The `DELETE_ME_` files in the clustering folder are intentional scratch files for early exploratory work and can be removed later. The main presentation-quality exploratory path is now the HTML report generator under `analysis/exploratory_clustering/`.
 
 

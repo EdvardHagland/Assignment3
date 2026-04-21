@@ -115,19 +115,6 @@ files.download("analysis/exploratory_clustering/output/exploratory_clustering_re
 files.download("analysis/exploratory_clustering/output/exploratory_clustering_report.pdf")
 ```
 
-## Block 8: Repair an already-generated HTML file without rerunning the model
-
-If you already have a generated HTML report in the runtime and the plots are blank in the browser, you can repair the standalone file without touching embeddings or clustering:
-
-```python
-!python analysis/exploratory_clustering/fix_standalone_html.py \
-    analysis/exploratory_clustering/output/exploratory_clustering_report.html
-```
-
-## Optional manual workflow
-
-If you want to inspect the mechanics manually rather than using the one-command report script, the disposable files under `analysis/exploratory_clustering/DELETE_ME_*` are still there as a scratch area.
-
 ## What we want from this first pass
 
 The first exploratory pass is not meant to produce the final argument. It is meant to help us answer:
@@ -147,7 +134,7 @@ The first exploratory pass is not meant to produce the final argument. It is mea
 5. If the HTML report looks good, use it directly as a shareable exploratory artifact for the group.
 
 
-## Block 9: Run the CPU-only cluster shift diagnostics
+## Block 8: Run the CPU-only cluster shift diagnostics
 
 This pass does not touch embeddings. It re-ranks the saved clusters by relative movement, filters out company-dominated clusters, and computes within-cluster pre/post contrast terms from the saved sampled rows.
 
@@ -163,7 +150,7 @@ This will write:
 
 If you only have `cluster_summary.csv`, you can still run the script without `--sampled-rows`; it will still re-rank and flag concentrated clusters, but it will skip the within-cluster contrast terms.
 
-## Block 10: Download the diagnostics outputs
+## Block 9: Download the diagnostics outputs
 
 ```python
 from google.colab import files
