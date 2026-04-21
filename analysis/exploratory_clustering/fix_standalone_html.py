@@ -15,9 +15,13 @@ import argparse
 from pathlib import Path
 
 
-PLOTLY_SCRIPT_START = "<script>/*!"
 PLOTLY_SCRIPT_END = "</script>"
 GOOGLE_FONTS_IMPORT = '@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Source+Serif+4:wght@400;600;700&display=swap");'
+PLOTLY_MARKERS = (
+    "!function(t,e)",
+    "plotly.js",
+    "window.Plotly",
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -32,14 +36,26 @@ def parse_args() -> argparse.Namespace:
 
 
 def extract_plotly_bundle(html_text: str) -> tuple[str, str]:
-    start = html_text.rfind(PLOTLY_SCRIPT_START)
-    if start == -1:
-        raise RuntimeError("Could not find embedded Plotly bundle in the HTML file.")
-    end = html_text.find(PLOTLY_SCRIPT_END, start)
-    if end == -1:
-        raise RuntimeError("Could not find the end of the embedded Plotly bundle.")
-    end += len(PLOTLY_SCRIPT_END)
-    return html_text[start:end], html_text[:start] + html_text[end:]
+    body_close = html_text.rfind("</body>")
+    search_space = html_text if body_close == -1 else html_text[:body_close]
+
+    for marker in PLOTLY_MARKERS:
+        marker_pos = search_space.rfind(marker)
+        if marker_pos == -1:
+            continue
+        start = search_space.rfind("<script", 0, marker_pos)
+        if start == -1:
+            continue
+        script_tag_close = search_space.find(">", start)
+        if script_tag_close == -1 or script_tag_close > marker_pos:
+            continue
+        end = search_space.find(PLOTLY_SCRIPT_END, marker_pos)
+        if end == -1:
+            continue
+        end += len(PLOTLY_SCRIPT_END)
+        return html_text[start:end], html_text[:start] + html_text[end:]
+
+    raise RuntimeError("Could not find embedded Plotly bundle in the HTML file.")
 
 
 def repair_html(html_text: str) -> str:
