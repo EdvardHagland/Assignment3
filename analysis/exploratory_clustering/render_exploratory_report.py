@@ -152,29 +152,29 @@ def build_plotly_template() -> str:
 
     pio.templates[template_name] = go.layout.Template(
         layout=go.Layout(
-            font=dict(family="IBM Plex Sans, Segoe UI, sans-serif", color="#13212c", size=15),
-            title=dict(font=dict(family="Source Serif 4, Georgia, serif", size=22, color="#13212c")),
-            paper_bgcolor="#f5f1e8",
-            plot_bgcolor="#fffdf8",
+            font=dict(family="Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif", color="#1a2a35", size=13),
+            title=dict(font=dict(family="Source Serif 4, Georgia, serif", size=20, color="#1a2a35")),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(255,253,249,0.5)",
             colorway=[
                 "#0f4c5c",
                 "#c56b3c",
-                "#709255",
+                "#5a8a3e",
                 "#9d4e5f",
                 "#3e6c8f",
                 "#c1a35f",
                 "#5d576b",
                 "#1b998b",
             ],
-            margin=dict(l=30, r=30, t=70, b=40),
+            margin=dict(l=40, r=24, t=56, b=36),
             hoverlabel=dict(
                 bgcolor="#fffdf8",
                 bordercolor="#d9cdb8",
-                font=dict(family="IBM Plex Sans, Segoe UI, sans-serif", color="#13212c"),
+                font=dict(family="Inter, -apple-system, Segoe UI, sans-serif", color="#1a2a35", size=12),
             ),
-            xaxis=dict(showgrid=True, gridcolor="#ebe2d3", linecolor="#d6c9b7", zeroline=False),
-            yaxis=dict(showgrid=True, gridcolor="#ebe2d3", linecolor="#d6c9b7", zeroline=False),
-            legend=dict(bgcolor="rgba(255,253,248,0.9)", bordercolor="#d9cdb8", borderwidth=1),
+            xaxis=dict(showgrid=True, gridcolor="rgba(221,209,190,0.5)", linecolor="#d6c9b7", zeroline=False),
+            yaxis=dict(showgrid=True, gridcolor="rgba(221,209,190,0.5)", linecolor="#d6c9b7", zeroline=False),
+            legend=dict(bgcolor="rgba(255,253,248,0.85)", bordercolor="rgba(221,209,190,0.6)", borderwidth=1),
         )
     )
     return template_name
