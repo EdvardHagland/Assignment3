@@ -306,6 +306,7 @@
       <div class="hero-meta">
         <div class="metric-card"><div class="metric-label">Full corpus rows</div><div class="metric-value">{{ summary.full_rows }}</div></div>
         <div class="metric-card"><div class="metric-label">Exploratory sample</div><div class="metric-value">{{ summary.sample_rows }}</div></div>
+        <div class="metric-card"><div class="metric-label">Scatter display sample</div><div class="metric-value">{{ summary.display_rows }}</div></div>
         <div class="metric-card"><div class="metric-label">Companies</div><div class="metric-value">{{ summary.companies }}</div></div>
         <div class="metric-card"><div class="metric-label">Clusters found</div><div class="metric-value">{{ summary.clusters_found }}</div></div>
         <div class="metric-card"><div class="metric-label">Noise share</div><div class="metric-value">{{ summary.noise_share }}</div></div>
@@ -370,6 +371,7 @@
       <div class="grid-2">
         <div class="figure-card">{{ figures.cluster_period | safe }}</div>
         <div class="figure-card">{{ figures.cluster_layer | safe }}</div>
+        <div class="figure-card full">{{ figures.cluster_year_heatmap | safe }}</div>
       </div>
     </section>
 
@@ -386,9 +388,12 @@
         <article class="cluster-card">
           <div class="cluster-head">
             <h3>{{ cluster.cluster_label }}</h3>
-            <div class="cluster-size">{{ cluster.cluster_size }} sampled rows</div>
+            <div class="cluster-size">{{ cluster.cluster_size }} sampled rows · {{ cluster.ticker_count }} tickers</div>
           </div>
           <p class="cluster-tags">{{ cluster.top_terms }}</p>
+          {% if cluster.top_tickers %}
+          <p class="cluster-tags"><strong>Top tickers:</strong> {{ cluster.top_tickers }}</p>
+          {% endif %}
           <div class="delta {% if cluster.delta < 0 %}negative{% endif %}">
             {% if cluster.delta >= 0 %}+{% endif %}{{ "%.1f"|format(cluster.delta * 100) }} percentage points post-minus-pre
           </div>

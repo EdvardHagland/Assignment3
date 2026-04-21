@@ -28,7 +28,7 @@ The dataset-generation block is included too, but it is optional. In most cases 
 ## Block 2: Install dependencies
 
 ```python
-!pip -q install pandas numpy scikit-learn matplotlib seaborn plotly jinja2 sentence-transformers umap-learn hdbscan bertopic
+!pip -q install pandas numpy scikit-learn matplotlib seaborn plotly jinja2 kaleido reportlab sentence-transformers umap-learn hdbscan bertopic
 ```
 
 ## Block 3: Optional dataset generation
@@ -80,7 +80,7 @@ display(df.groupby("ticker").size().sort_values(ascending=False).head(15))
 df[["annotation_id", "ticker", "company_layer", "filing_year", "period_bucket", "text"]].sample(5, random_state=42)
 ```
 
-## Block 6: Render the HTML report
+## Block 6: Render the HTML report and PDF
 
 This is now the main exploratory path.
 
@@ -90,23 +90,29 @@ The current default model is `BAAI/bge-m3`.
 !python analysis/exploratory_clustering/render_exploratory_report.py \
     --model-name BAAI/bge-m3 \
     --sample-per-period 3000 \
+    --scatter-display-max-points 3500 \
     --cluster-min-size 80 \
-    --output-html analysis/exploratory_clustering/output/exploratory_clustering_report.html
+    --output-html analysis/exploratory_clustering/output/exploratory_clustering_report.html \
+    --output-pdf analysis/exploratory_clustering/output/exploratory_clustering_report.pdf
 ```
 
 This will write:
 
 - `analysis/exploratory_clustering/output/exploratory_clustering_report.html`
+- `analysis/exploratory_clustering/output/exploratory_clustering_report.pdf`
 - `analysis/exploratory_clustering/output/sampled_cluster_rows.csv`
 - `analysis/exploratory_clustering/output/cluster_summary.csv`
 - `analysis/exploratory_clustering/output/representative_examples.csv`
 - `analysis/exploratory_clustering/output/report_metadata.json`
 
-## Block 7: Download the compiled HTML file
+The HTML stays interactive. The PDF is the safer static sharing version.
+
+## Block 7: Download the compiled outputs
 
 ```python
 from google.colab import files
 files.download("analysis/exploratory_clustering/output/exploratory_clustering_report.html")
+files.download("analysis/exploratory_clustering/output/exploratory_clustering_report.pdf")
 ```
 
 ## Optional manual workflow

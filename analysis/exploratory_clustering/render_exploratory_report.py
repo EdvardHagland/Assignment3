@@ -10,6 +10,7 @@ computing descriptive corpus figures from the full final dataset.
 from __future__ import annotations
 
 import argparse
+import html
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -37,6 +38,7 @@ POST_PERIOD = "post_2022"
 @dataclass
 class ReportArtifacts:
     sampled_df: pd.DataFrame
+    display_df: pd.DataFrame
     cluster_summary_df: pd.DataFrame
     representative_df: pd.DataFrame
     figures: Dict[str, str]
@@ -120,6 +122,22 @@ def parse_args() -> argparse.Namespace:
         default=3,
         help="How many representative examples to show per cluster.",
     )
+    parser.add_argument(
+        "--scatter-display-max-points",
+        type=int,
+        default=4000,
+        help="Maximum number of points to display in browser scatter plots.",
+    )
+    parser.add_argument(
+        "--output-pdf",
+        default="",
+        help="Optional path for a static PDF export.",
+    )
+    parser.add_argument(
+        "--pdf-title",
+        default="Defense Risk Narratives: Exploratory Clustering Report",
+        help="Title used in the optional PDF export.",
+    )
     return parser.parse_args()
 
 
@@ -172,6 +190,22 @@ def sample_corpus(df: pd.DataFrame, sample_per_period: int, random_state: int) -
         .apply(lambda part: part.sample(min(len(part), sample_per_period), random_state=random_state))
         .reset_index(drop=True)
     )
+
+
+def build_display_sample(df: pd.DataFrame, max_points: int, random_state: int) -> pd.DataFrame:
+    if len(df) <= max_points:
+        return df.copy()
+
+    group_count = max(df["cluster_label"].nunique(), 1)
+    per_group = max(1, max_points // group_count)
+    display_df = (
+        df.groupby("cluster_label", group_keys=False)
+        .apply(lambda part: part.sample(min(len(part), per_group), random_state=random_state))
+        .reset_index(drop=True)
+    )
+    if len(display_df) > max_points:
+        display_df = display_df.sample(max_points, random_state=random_state).reset_index(drop=True)
+    return display_df
 
 
 def embed_texts(df: pd.DataFrame, model_name: str, batch_size: int) -> np.ndarray:
@@ -315,8 +349,28 @@ def build_cluster_summary(sampled_df: pd.DataFrame, top_term_map: Dict[int, str]
     )
 
     totals = sampled_df.groupby(["cluster", "cluster_label"]).size().reset_index(name="cluster_size")
+    ticker_coverage = (
+        sampled_df.groupby(["cluster", "cluster_label"])["ticker"]
+        .nunique()
+        .reset_index(name="ticker_count")
+    )
+    top_tickers = (
+        sampled_df.groupby(["cluster", "cluster_label", "ticker"])
+        .size()
+        .reset_index(name="n")
+        .sort_values(["cluster", "n", "ticker"], ascending=[True, False, True])
+        .groupby(["cluster", "cluster_label"])
+        .head(3)
+    )
+    top_ticker_strings = (
+        top_tickers.groupby(["cluster", "cluster_label"])
+        .apply(lambda x: ", ".join(f"{row.ticker} ({int(row.n)})" for _, row in x.iterrows()), include_groups=False)
+        .reset_index(name="top_tickers")
+    )
     summary = totals.merge(period_pivot, on=["cluster", "cluster_label"], how="left")
     summary = summary.merge(layer_pivot, on=["cluster", "cluster_label"], how="left")
+    summary = summary.merge(ticker_coverage, on=["cluster", "cluster_label"], how="left")
+    summary = summary.merge(top_ticker_strings, on=["cluster", "cluster_label"], how="left")
     summary["top_terms"] = summary["cluster"].map(top_term_map)
     summary = summary.sort_values(["cluster_size", "post_minus_pre"], ascending=[False, False]).reset_index(drop=True)
     return summary
@@ -359,13 +413,14 @@ def sample_mix_figure(sampled_df: pd.DataFrame, template_name: str) -> go.Figure
     return fig
 
 
-def umap_period_figure(sampled_df: pd.DataFrame, template_name: str) -> go.Figure:
+def umap_period_figure(display_df: pd.DataFrame, template_name: str) -> go.Figure:
     fig = px.scatter(
-        sampled_df,
+        display_df,
         x="umap_x",
         y="umap_y",
         color="period_bucket",
         symbol="company_layer",
+        render_mode="webgl",
         template=template_name,
         title="Embedding space by period",
         opacity=0.72,
@@ -375,7 +430,6 @@ def umap_period_figure(sampled_df: pd.DataFrame, template_name: str) -> go.Figur
             "company_layer": True,
             "filing_year": True,
             "cluster_label": True,
-            "text_preview": True,
             "umap_x": False,
             "umap_y": False,
         },
@@ -385,12 +439,13 @@ def umap_period_figure(sampled_df: pd.DataFrame, template_name: str) -> go.Figur
     return fig
 
 
-def umap_cluster_figure(sampled_df: pd.DataFrame, template_name: str) -> go.Figure:
+def umap_cluster_figure(display_df: pd.DataFrame, template_name: str) -> go.Figure:
     fig = px.scatter(
-        sampled_df,
+        display_df,
         x="umap_x",
         y="umap_y",
         color="cluster_label",
+        render_mode="webgl",
         template=template_name,
         title="Embedding space by emergent cluster",
         opacity=0.72,
@@ -400,13 +455,44 @@ def umap_cluster_figure(sampled_df: pd.DataFrame, template_name: str) -> go.Figu
             "company_layer": True,
             "filing_year": True,
             "period_bucket": True,
-            "text_preview": True,
             "umap_x": False,
             "umap_y": False,
         },
     )
     fig.update_traces(marker=dict(size=7))
     fig.update_layout(height=620)
+    return fig
+
+
+def cluster_year_heatmap(sampled_df: pd.DataFrame, cluster_summary_df: pd.DataFrame, top_clusters: int, template_name: str) -> go.Figure:
+    top_labels = (
+        cluster_summary_df[cluster_summary_df["cluster"] != -1]
+        .assign(abs_delta=lambda x: x["post_minus_pre"].abs())
+        .sort_values(["abs_delta", "cluster_size"], ascending=[False, False])
+        .head(top_clusters)["cluster_label"]
+        .tolist()
+    )
+    heatmap_df = sampled_df[sampled_df["cluster_label"].isin(top_labels)].copy()
+    heatmap_df = (
+        heatmap_df.groupby(["cluster_label", "filing_year"])
+        .size()
+        .reset_index(name="n")
+    )
+    heatmap_df["year_share"] = (
+        heatmap_df.groupby("filing_year")["n"].transform(lambda x: x / x.sum())
+    )
+    ordered_labels = top_labels[::-1]
+    fig = px.imshow(
+        heatmap_df.pivot(index="cluster_label", columns="filing_year", values="year_share")
+        .reindex(index=ordered_labels)
+        .fillna(0),
+        color_continuous_scale=["#fff8eb", "#d7e7ea", "#7aa6b8", "#0f4c5c"],
+        aspect="auto",
+        template=template_name,
+        title="Top shifted clusters by filing year share",
+        labels=dict(x="Filing year", y="Cluster", color="Share"),
+    )
+    fig.update_layout(height=460, coloraxis_colorbar=dict(title="Share"))
     return fig
 
 
@@ -466,26 +552,21 @@ def render_plot(fig: go.Figure) -> str:
     return fig.to_html(full_html=False, include_plotlyjs=False, config={"displayModeBar": False, "responsive": True})
 
 
-def render_report(args: argparse.Namespace, full_df: pd.DataFrame, artifacts: ReportArtifacts) -> str:
-    template_path = Path(args.template)
-    env = Environment(
-        loader=FileSystemLoader(str(template_path.parent)),
-        autoescape=select_autoescape(["html", "xml"]),
-        trim_blocks=True,
-        lstrip_blocks=True,
-    )
-    template = env.get_template(template_path.name)
-
+def build_cluster_cards(
+    cluster_summary_df: pd.DataFrame,
+    representative_df: pd.DataFrame,
+    top_clusters: int,
+) -> List[dict]:
     top_clusters_df = (
-        artifacts.cluster_summary_df[artifacts.cluster_summary_df["cluster"] != -1]
+        cluster_summary_df[cluster_summary_df["cluster"] != -1]
         .assign(abs_delta=lambda x: x["post_minus_pre"].abs())
         .sort_values(["abs_delta", "cluster_size"], ascending=[False, False])
-        .head(args.top_clusters)
+        .head(top_clusters)
         .copy()
     )
     cluster_cards: List[dict] = []
     for _, row in top_clusters_df.iterrows():
-        reps = artifacts.representative_df[artifacts.representative_df["cluster"] == row["cluster"]]
+        reps = representative_df[representative_df["cluster"] == row["cluster"]]
         examples = [
             {
                 "ticker": rep["ticker"],
@@ -500,6 +581,8 @@ def render_report(args: argparse.Namespace, full_df: pd.DataFrame, artifacts: Re
             {
                 "cluster_label": row["cluster_label"],
                 "cluster_size": int(row["cluster_size"]),
+                "ticker_count": int(row.get("ticker_count", 0)),
+                "top_tickers": row.get("top_tickers", ""),
                 "top_terms": row["top_terms"],
                 "pre_share": float(row.get(PRE_PERIOD, 0.0)),
                 "post_share": float(row.get(POST_PERIOD, 0.0)),
@@ -509,6 +592,185 @@ def render_report(args: argparse.Namespace, full_df: pd.DataFrame, artifacts: Re
                 "examples": examples,
             }
         )
+    return cluster_cards
+
+
+def export_figure_png(fig: go.Figure, path: Path, width: int = 1400, height: int = 860, scale: int = 2) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.write_image(str(path), format="png", width=width, height=height, scale=scale)
+
+
+def build_pdf_report(
+    output_pdf: Path,
+    title: str,
+    subtitle: str,
+    summary_metrics: Dict[str, str],
+    figure_paths: Dict[str, Path],
+    cluster_cards: List[dict],
+) -> None:
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+        from reportlab.lib.units import inch
+        from reportlab.platypus import Image, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    except ImportError as exc:
+        raise RuntimeError(
+            "PDF export requires reportlab. Install it in Colab with `pip install reportlab kaleido`."
+        ) from exc
+
+    output_pdf.parent.mkdir(parents=True, exist_ok=True)
+    doc = SimpleDocTemplate(
+        str(output_pdf),
+        pagesize=A4,
+        rightMargin=36,
+        leftMargin=36,
+        topMargin=42,
+        bottomMargin=36,
+    )
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        "ReportTitle",
+        parent=styles["Title"],
+        fontName="Helvetica-Bold",
+        fontSize=22,
+        leading=26,
+        textColor=colors.HexColor("#13212c"),
+        spaceAfter=10,
+    )
+    subtitle_style = ParagraphStyle(
+        "ReportSubtitle",
+        parent=styles["BodyText"],
+        fontName="Helvetica",
+        fontSize=11,
+        leading=15,
+        textColor=colors.HexColor("#566572"),
+        spaceAfter=14,
+    )
+    heading_style = ParagraphStyle(
+        "SectionHeading",
+        parent=styles["Heading2"],
+        fontName="Helvetica-Bold",
+        fontSize=15,
+        leading=18,
+        textColor=colors.HexColor("#13212c"),
+        spaceAfter=8,
+        spaceBefore=6,
+    )
+    body_style = ParagraphStyle(
+        "Body",
+        parent=styles["BodyText"],
+        fontName="Helvetica",
+        fontSize=10,
+        leading=14,
+        textColor=colors.HexColor("#13212c"),
+    )
+    small_style = ParagraphStyle(
+        "Small",
+        parent=body_style,
+        fontSize=9,
+        leading=12,
+        textColor=colors.HexColor("#566572"),
+    )
+
+    story = [
+        Paragraph(title, title_style),
+        Paragraph(subtitle, subtitle_style),
+    ]
+
+    metric_rows = [
+        ["Full corpus rows", summary_metrics["full_rows"], "Exploratory sample", summary_metrics["sample_rows"]],
+        ["Companies", summary_metrics["companies"], "Clusters found", summary_metrics["clusters_found"]],
+        ["Prime rows", summary_metrics["prime_rows"], "Supplier rows", summary_metrics["supplier_rows"]],
+        ["Noise share", summary_metrics["noise_share"], "Embedding model", summary_metrics["model_name"]],
+    ]
+    metric_table = Table(metric_rows, colWidths=[1.5 * inch, 1.0 * inch, 1.7 * inch, 2.7 * inch])
+    metric_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f7f3eb")),
+                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#d8ccb8")),
+                ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#d8ccb8")),
+                ("TEXTCOLOR", (0, 0), (-1, -1), colors.HexColor("#13212c")),
+                ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+                ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+                ("FONTNAME", (2, 0), (2, -1), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("LEADING", (0, 0), (-1, -1), 12),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ]
+        )
+    )
+    story.extend([metric_table, Spacer(1, 0.22 * inch)])
+
+    figure_sequence = [
+        ("Corpus structure", "corpus_overview"),
+        ("Balanced exploratory sample", "sample_mix"),
+        ("UMAP by period", "umap_period"),
+        ("UMAP by cluster", "umap_cluster"),
+        ("Pre/post cluster comparison", "cluster_period"),
+        ("Prime/supplier cluster comparison", "cluster_layer"),
+        ("Cluster change by year", "cluster_year_heatmap"),
+    ]
+    for label, key in figure_sequence:
+        if key not in figure_paths:
+            continue
+        story.append(Paragraph(label, heading_style))
+        story.append(Image(str(figure_paths[key]), width=6.8 * inch, height=4.1 * inch))
+        story.append(Spacer(1, 0.18 * inch))
+
+    story.append(PageBreak())
+    story.append(Paragraph("Highlighted clusters", heading_style))
+    story.append(
+        Paragraph(
+            "These cards summarize the most shifted clusters from the exploratory pass. They are not final labels, but they help identify promising themes for close reading and later supervised annotation.",
+            body_style,
+        )
+    )
+    story.append(Spacer(1, 0.16 * inch))
+
+    for cluster in cluster_cards:
+        story.append(
+            Paragraph(
+                f"<b>{html.escape(cluster['cluster_label'])}</b> · {cluster['cluster_size']} sampled rows · {cluster['ticker_count']} tickers",
+                body_style,
+            )
+        )
+        story.append(Paragraph(f"<b>Top terms:</b> {html.escape(cluster['top_terms'])}", small_style))
+        if cluster["top_tickers"]:
+            story.append(Paragraph(f"<b>Top tickers:</b> {html.escape(cluster['top_tickers'])}", small_style))
+        story.append(
+            Paragraph(
+                f"<b>Pre share:</b> {cluster['pre_share'] * 100:.1f}% &nbsp;&nbsp; <b>Post share:</b> {cluster['post_share'] * 100:.1f}% &nbsp;&nbsp; "
+                f"<b>Prime share:</b> {cluster['prime_share'] * 100:.1f}% &nbsp;&nbsp; <b>Supplier share:</b> {cluster['supplier_share'] * 100:.1f}%",
+                small_style,
+            )
+        )
+        for example in cluster["examples"][:2]:
+            story.append(
+                Paragraph(
+                    f"<b>{html.escape(example['ticker'])}</b> · {html.escape(example['company_layer'])} · {example['filing_year']} · {html.escape(example['period_bucket'])}<br/>{html.escape(example['text'])}",
+                    small_style,
+                )
+            )
+        story.append(Spacer(1, 0.18 * inch))
+
+    doc.build(story)
+
+
+def render_report(args: argparse.Namespace, full_df: pd.DataFrame, artifacts: ReportArtifacts, cluster_cards: List[dict]) -> str:
+    template_path = Path(args.template)
+    env = Environment(
+        loader=FileSystemLoader(str(template_path.parent)),
+        autoescape=select_autoescape(["html", "xml"]),
+        trim_blocks=True,
+        lstrip_blocks=True,
+    )
+    template = env.get_template(template_path.name)
 
     return template.render(
         title="Defense Risk Narratives: Exploratory Clustering Report",
@@ -529,6 +791,7 @@ def main() -> None:
     artifacts_dir = Path(args.artifacts_dir)
     artifacts_dir.mkdir(parents=True, exist_ok=True)
     output_html.parent.mkdir(parents=True, exist_ok=True)
+    output_pdf = Path(args.output_pdf) if args.output_pdf else None
 
     template_name = build_plotly_template()
     full_df = load_dataset(Path(args.dataset))
@@ -547,22 +810,29 @@ def main() -> None:
     sampled_df["umap_x"] = coords_2d[:, 0]
     sampled_df["umap_y"] = coords_2d[:, 1]
     sampled_df["text_preview"] = sampled_df["text"].map(lambda text: shorten(text, width=180, placeholder="..."))
+    display_df = build_display_sample(sampled_df, args.scatter_display_max_points, args.random_state)
 
     top_term_map = top_terms_by_cluster(sampled_df, args.top_terms)
     representative_df = representative_examples(sampled_df, embeddings, args.examples_per_cluster)
     cluster_summary_df = build_cluster_summary(sampled_df, top_term_map)
+    cluster_cards = build_cluster_cards(cluster_summary_df, representative_df, args.top_clusters)
 
     sampled_df.drop(columns=["text_preview"]).to_csv(artifacts_dir / "sampled_cluster_rows.csv", index=False)
     cluster_summary_df.to_csv(artifacts_dir / "cluster_summary.csv", index=False)
     representative_df.to_csv(artifacts_dir / "representative_examples.csv", index=False)
 
+    figure_objects = {
+        "corpus_overview": corpus_overview_figure(full_df, template_name),
+        "sample_mix": sample_mix_figure(sampled_df, template_name),
+        "umap_period": umap_period_figure(display_df, template_name),
+        "umap_cluster": umap_cluster_figure(display_df, template_name),
+        "cluster_period": cluster_period_figure(cluster_summary_df, args.top_clusters, template_name),
+        "cluster_layer": cluster_layer_figure(cluster_summary_df, args.top_clusters, template_name),
+        "cluster_year_heatmap": cluster_year_heatmap(sampled_df, cluster_summary_df, args.top_clusters, template_name),
+    }
     figures = {
-        "corpus_overview": render_plot(corpus_overview_figure(full_df, template_name)),
-        "sample_mix": render_plot(sample_mix_figure(sampled_df, template_name)),
-        "umap_period": render_plot(umap_period_figure(sampled_df, template_name)),
-        "umap_cluster": render_plot(umap_cluster_figure(sampled_df, template_name)),
-        "cluster_period": render_plot(cluster_period_figure(cluster_summary_df, args.top_clusters, template_name)),
-        "cluster_layer": render_plot(cluster_layer_figure(cluster_summary_df, args.top_clusters, template_name)),
+        key: render_plot(fig)
+        for key, fig in figure_objects.items()
     }
 
     cluster_count = int((cluster_summary_df["cluster"] != -1).sum())
@@ -570,6 +840,7 @@ def main() -> None:
     summary_metrics = {
         "full_rows": f"{len(full_df):,}",
         "sample_rows": f"{len(sampled_df):,}",
+        "display_rows": f"{len(display_df):,}",
         "companies": f"{full_df['ticker'].nunique():,}",
         "prime_rows": f"{(full_df['company_layer'] == 'prime').sum():,}",
         "supplier_rows": f"{(full_df['company_layer'] == 'supplier').sum():,}",
@@ -580,21 +851,40 @@ def main() -> None:
 
     report_artifacts = ReportArtifacts(
         sampled_df=sampled_df,
+        display_df=display_df,
         cluster_summary_df=cluster_summary_df,
         representative_df=representative_df,
         figures=figures,
         summary_metrics=summary_metrics,
     )
 
-    html = render_report(args, full_df, report_artifacts)
+    html = render_report(args, full_df, report_artifacts, cluster_cards)
     output_html.write_text(html, encoding="utf-8")
+
+    if output_pdf:
+        figure_dir = artifacts_dir / "pdf_figures"
+        figure_paths: Dict[str, Path] = {}
+        for key, fig in figure_objects.items():
+            figure_path = figure_dir / f"{key}.png"
+            export_figure_png(fig, figure_path)
+            figure_paths[key] = figure_path
+        build_pdf_report(
+            output_pdf=output_pdf,
+            title=args.pdf_title,
+            subtitle="Static export derived from the exploratory clustering run",
+            summary_metrics=summary_metrics,
+            figure_paths=figure_paths,
+            cluster_cards=cluster_cards,
+        )
 
     metadata = {
         "dataset": args.dataset,
         "output_html": str(output_html),
+        "output_pdf": str(output_pdf) if output_pdf else "",
         "artifacts_dir": str(artifacts_dir),
         "model_name": args.model_name,
         "sample_per_period": args.sample_per_period,
+        "scatter_display_max_points": args.scatter_display_max_points,
         "cluster_min_size": args.cluster_min_size,
         "umap_neighbors": args.umap_neighbors,
         "summary_metrics": summary_metrics,
@@ -602,6 +892,8 @@ def main() -> None:
     (artifacts_dir / "report_metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
 
     print(f"Rendered HTML report to: {output_html}")
+    if output_pdf:
+        print(f"Rendered PDF report to: {output_pdf}")
     print(f"Artifacts written to: {artifacts_dir}")
 
 

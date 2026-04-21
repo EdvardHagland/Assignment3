@@ -12,7 +12,7 @@ Current starter files:
 Main analysis files:
 
 - [render_exploratory_report.py](/C:/Users/edvar/Assignment3/analysis/exploratory_clustering/render_exploratory_report.py)
-  - builds embeddings, clusters the balanced sample, and writes a polished HTML report plus CSV artifacts
+  - builds embeddings, clusters the balanced sample, and writes a polished HTML report, an optional PDF, and CSV artifacts
 - [report_template.html.j2](/C:/Users/edvar/Assignment3/analysis/exploratory_clustering/report_template.html.j2)
   - custom report layout and styling for the compiled HTML output
 
