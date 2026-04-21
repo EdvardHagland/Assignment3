@@ -115,6 +115,15 @@ files.download("analysis/exploratory_clustering/output/exploratory_clustering_re
 files.download("analysis/exploratory_clustering/output/exploratory_clustering_report.pdf")
 ```
 
+## Block 8: Repair an already-generated HTML file without rerunning the model
+
+If you already have a generated HTML report in the runtime and the plots are blank in the browser, you can repair the standalone file without touching embeddings or clustering:
+
+```python
+!python analysis/exploratory_clustering/fix_standalone_html.py \
+    analysis/exploratory_clustering/output/exploratory_clustering_report.html
+```
+
 ## Optional manual workflow
 
 If you want to inspect the mechanics manually rather than using the one-command report script, the disposable files under `analysis/exploratory_clustering/DELETE_ME_*` are still there as a scratch area.
