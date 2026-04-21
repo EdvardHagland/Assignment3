@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ title }}</title>
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Source+Serif+4:wght@400;600;700&display=swap");
+
+    :root {
+      --ink: #13212c;
+      --muted: #566572;
+      --paper: #f5f1e8;
+      --card: rgba(255, 253, 248, 0.92);
+      --line: #d8ccb8;
+      --accent: #0f4c5c;
+      --warm: #c56b3c;
+      --olive: #6e8b59;
+      --shadow: 0 20px 45px rgba(19, 33, 44, 0.08);
+      --radius: 22px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(15, 76, 92, 0.12), transparent 30%),
+        radial-gradient(circle at top right, rgba(197, 107, 60, 0.10), transparent 28%),
+        linear-gradient(180deg, #f7f3eb 0%, #efe7d9 100%);
+      line-height: 1.6;
+    }
+
+    .page {
+      width: min(1360px, calc(100vw - 40px));
+      margin: 28px auto 60px;
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: 42px 42px 36px;
+      border: 1px solid rgba(216, 204, 184, 0.9);
+      border-radius: 30px;
+      background: linear-gradient(135deg, rgba(255, 253, 248, 0.95) 0%, rgba(248, 241, 228, 0.88) 100%);
+      box-shadow: var(--shadow);
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto -80px -120px auto;
+      width: 320px;
+      height: 320px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(15, 76, 92, 0.14), transparent 70%);
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      gap: 10px;
+      align-items: center;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: rgba(15, 76, 92, 0.08);
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    h1, h2, h3 {
+      margin: 0;
+      font-family: "Source Serif 4", serif;
+      line-height: 1.1;
+    }
+
+    h1 {
+      margin-top: 18px;
+      font-size: clamp(2.2rem, 4vw, 4rem);
+      max-width: 10ch;
+    }
+
+    .subtitle {
+      max-width: 72ch;
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 1.05rem;
+    }
+
+    .hero-meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 16px;
+      margin-top: 28px;
+    }
+
+    .metric-card {
+      padding: 18px 18px 16px;
+      border-radius: var(--radius);
+      border: 1px solid rgba(216, 204, 184, 0.9);
+      background: rgba(255, 253, 248, 0.9);
+    }
+
+    .metric-label {
+      color: var(--muted);
+      font-size: 0.86rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .metric-value {
+      margin-top: 6px;
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .section {
+      margin-top: 26px;
+      padding: 28px;
+      border-radius: 28px;
+      border: 1px solid rgba(216, 204, 184, 0.9);
+      background: var(--card);
+      box-shadow: var(--shadow);
+    }
+
+    .section-header {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .section-header p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      max-width: 70ch;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 22px;
+    }
+
+    .figure-card {
+      padding: 18px;
+      border-radius: 22px;
+      border: 1px solid rgba(216, 204, 184, 0.9);
+      background: rgba(255, 253, 248, 0.86);
+    }
+
+    .figure-card.full { grid-column: 1 / -1; }
+
+    .figure-note {
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .method-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .method-chip {
+      padding: 14px 16px;
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(15, 76, 92, 0.08), rgba(15, 76, 92, 0.03));
+      border: 1px solid rgba(15, 76, 92, 0.12);
+      color: var(--ink);
+      font-size: 0.95rem;
+    }
+
+    .clusters {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 18px;
+      margin-top: 16px;
+    }
+
+    .cluster-card {
+      padding: 22px;
+      border-radius: 24px;
+      border: 1px solid rgba(216, 204, 184, 0.9);
+      background: rgba(255, 253, 248, 0.94);
+    }
+
+    .cluster-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 14px;
+      margin-bottom: 10px;
+    }
+
+    .cluster-size {
+      color: var(--warm);
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .cluster-tags {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .delta {
+      display: inline-block;
+      margin-bottom: 12px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 0.86rem;
+      font-weight: 700;
+      background: rgba(112, 146, 85, 0.15);
+      color: var(--olive);
+    }
+
+    .delta.negative {
+      background: rgba(197, 107, 60, 0.12);
+      color: var(--warm);
+    }
+
+    .shares {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .share-box {
+      padding: 12px;
+      border-radius: 16px;
+      background: rgba(15, 76, 92, 0.05);
+    }
+
+    .share-box strong {
+      display: block;
+      color: var(--muted);
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .share-box span {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    .examples {
+      display: grid;
+      gap: 12px;
+    }
+
+    .example {
+      padding: 14px 16px;
+      border-left: 3px solid rgba(15, 76, 92, 0.35);
+      border-radius: 14px;
+      background: rgba(245, 241, 232, 0.9);
+    }
+
+    .example-meta {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .example p {
+      margin: 8px 0 0;
+      font-size: 0.95rem;
+      color: var(--ink);
+    }
+
+    .footer {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    @media (max-width: 980px) {
+      .page { width: min(100vw - 24px, 1360px); }
+      .hero, .section { padding: 22px; }
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="hero">
+      <div class="eyebrow">Exploratory HTML report</div>
+      <h1>{{ title }}</h1>
+      <p class="subtitle">{{ subtitle }}</p>
+
+      <div class="hero-meta">
+        <div class="metric-card"><div class="metric-label">Full corpus rows</div><div class="metric-value">{{ summary.full_rows }}</div></div>
+        <div class="metric-card"><div class="metric-label">Exploratory sample</div><div class="metric-value">{{ summary.sample_rows }}</div></div>
+        <div class="metric-card"><div class="metric-label">Companies</div><div class="metric-value">{{ summary.companies }}</div></div>
+        <div class="metric-card"><div class="metric-label">Clusters found</div><div class="metric-value">{{ summary.clusters_found }}</div></div>
+        <div class="metric-card"><div class="metric-label">Noise share</div><div class="metric-value">{{ summary.noise_share }}</div></div>
+        <div class="metric-card"><div class="metric-label">Embedding model</div><div class="metric-value" style="font-size:1.05rem; line-height:1.3;">{{ summary.model_name }}</div></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <div>
+          <h2>Method at a glance</h2>
+          <p>This report uses the full corpus for descriptive counts and a balanced pre/post-2022 sample for embedding-based exploratory clustering.</p>
+        </div>
+      </div>
+      <div class="method-strip">
+        <div class="method-chip"><strong>Corpus:</strong> SEC 10-K Item 1A risk disclosures from primes and suppliers</div>
+        <div class="method-chip"><strong>Embedding model:</strong> {{ model_name }}</div>
+        <div class="method-chip"><strong>Clustering stack:</strong> UMAP to dense cluster space, then HDBSCAN</div>
+        <div class="method-chip"><strong>Sample design:</strong> up to {{ sample_per_period }} rows per period bucket</div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <div>
+          <h2>Corpus structure</h2>
+          <p>These figures show what the corpus looks like before we interpret any clusters.</p>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="figure-card">
+          <p class="figure-note">The full corpus remains larger on the post-2022 side, but the exploratory sample is balanced before clustering.</p>
+          {{ figures.corpus_overview | safe }}
+        </div>
+        <div class="figure-card">
+          <p class="figure-note">This sample mix is what the clustering model actually sees for the first exploratory pass.</p>
+          {{ figures.sample_mix | safe }}
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <div>
+          <h2>Embedding space</h2>
+          <p>The first figure colors the projection by period, while the second colors it by emergent cluster assignment.</p>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="figure-card full">{{ figures.umap_period | safe }}</div>
+        <div class="figure-card full">{{ figures.umap_cluster | safe }}</div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <div>
+          <h2>Comparative cluster signal</h2>
+          <p>These charts help us see where cluster composition differs most across time and across the prime-supplier split.</p>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="figure-card">{{ figures.cluster_period | safe }}</div>
+        <div class="figure-card">{{ figures.cluster_layer | safe }}</div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <div>
+          <h2>Highlighted clusters</h2>
+          <p>These are the most analytically promising clusters from the first exploratory pass. They are not final labels, but they do give us something concrete to inspect.</p>
+        </div>
+      </div>
+
+      <div class="clusters">
+        {% for cluster in cluster_cards %}
+        <article class="cluster-card">
+          <div class="cluster-head">
+            <h3>{{ cluster.cluster_label }}</h3>
+            <div class="cluster-size">{{ cluster.cluster_size }} sampled rows</div>
+          </div>
+          <p class="cluster-tags">{{ cluster.top_terms }}</p>
+          <div class="delta {% if cluster.delta < 0 %}negative{% endif %}">
+            {% if cluster.delta >= 0 %}+{% endif %}{{ "%.1f"|format(cluster.delta * 100) }} percentage points post-minus-pre
+          </div>
+
+          <div class="shares">
+            <div class="share-box"><strong>Pre-2022 share</strong><span>{{ "%.1f"|format(cluster.pre_share * 100) }}%</span></div>
+            <div class="share-box"><strong>Post-2022 share</strong><span>{{ "%.1f"|format(cluster.post_share * 100) }}%</span></div>
+            <div class="share-box"><strong>Prime share</strong><span>{{ "%.1f"|format(cluster.prime_share * 100) }}%</span></div>
+            <div class="share-box"><strong>Supplier share</strong><span>{{ "%.1f"|format(cluster.supplier_share * 100) }}%</span></div>
+          </div>
+
+          <div class="examples">
+            {% for example in cluster.examples %}
+            <div class="example">
+              <div class="example-meta">{{ example.ticker }} · {{ example.company_layer }} · {{ example.filing_year }} · {{ example.period_bucket }}</div>
+              <p>{{ example.text }}</p>
+            </div>
+            {% endfor %}
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+
+    <p class="footer">
+      Generated from <code>{{ generated_from }}</code>. This report is exploratory and intended to help guide annotation, hypothesis refinement, and later supervised classification.
+    </p>
+  </div>
+
+  <script>{{ plotly_js | safe }}</script>
+</body>
+</html>

@@ -22,8 +22,7 @@
   - labeling workflow overview
 - `fine_tuning/labeling/`
   - the annotation app, config, protocol, codebook, and labeling scripts in one place
-- `analysis/`
-  - proposal, notebooks, figures, and interpretation
+- `analysis/`\n  - Colab launch guide, HTML report pipeline, notebooks, figures, and interpretation
 - `config/`
   - firm universe and project configuration
 
@@ -122,3 +121,14 @@ The current annotation scheme uses `15` defense-specific risk categories. The on
 ## Next step
 
 The structure is now organized around scraping, one canonical corpus, and one explicit fine-tuning workflow. The next job is to build the fine-tuning dataset from the final corpus without breaking the double-label protocol.
+
+For analysis preparation, start here:
+
+- `analysis/COLAB_README.md`
+- `analysis/exploratory_clustering/render_exploratory_report.py`
+- `analysis/exploratory_clustering/report_template.html.j2`
+- `analysis/exploratory_clustering/`
+
+The `DELETE_ME_` files in the clustering folder are intentional scratch files for early exploratory work and can be removed later. The main presentation-quality exploratory path is now the HTML report generator under `analysis/exploratory_clustering/`.
+
+
