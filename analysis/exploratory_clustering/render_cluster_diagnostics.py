@@ -15,6 +15,7 @@ import argparse
 import html
 import re
 from pathlib import Path
+from textwrap import shorten
 from typing import Iterable
 
 import numpy as np
@@ -168,6 +169,59 @@ def distinct_terms_for_cluster(cluster_rows: pd.DataFrame, top_terms: int) -> tu
     return ', '.join(top_post), ', '.join(top_pre)
 
 
+def preview_text(value: str, width: int = 220) -> str:
+    return shorten(str(value).replace('\n', ' ').replace('\r', ' '), width=width, placeholder='...')
+
+
+def build_examples_lookup(sampled_df: pd.DataFrame | None, representative_df: pd.DataFrame | None, max_examples: int = 2) -> dict[int, list[dict]]:
+    lookup: dict[int, list[dict]] = {}
+
+    if representative_df is not None and {'cluster', 'text', 'ticker'}.issubset(representative_df.columns):
+        for cluster_id, part in representative_df.groupby('cluster'):
+            rows = []
+            for _, row in part.head(max_examples).iterrows():
+                year = ''
+                if 'filing_year' in row and pd.notna(row['filing_year']):
+                    year = f" {int(row['filing_year'])}"
+                period = ''
+                if 'period_bucket' in row and pd.notna(row['period_bucket']):
+                    period = f" [{row['period_bucket']}]"
+                rows.append(
+                    {
+                        'label': f"{row['ticker']}{year}{period}",
+                        'text': preview_text(row['text']),
+                    }
+                )
+            lookup[int(cluster_id)] = rows
+
+    if sampled_df is not None and {'cluster', 'text', 'ticker', 'period_bucket'}.issubset(sampled_df.columns):
+        for cluster_id, part in sampled_df.groupby('cluster'):
+            cluster_id = int(cluster_id)
+            if cluster_id in lookup:
+                continue
+
+            rows = []
+            for period in [POST_PERIOD, PRE_PERIOD]:
+                period_part = part[part['period_bucket'] == period]
+                if period_part.empty:
+                    continue
+                row = period_part.iloc[0]
+                year = ''
+                if 'filing_year' in row and pd.notna(row['filing_year']):
+                    year = f" {int(row['filing_year'])}"
+                rows.append(
+                    {
+                        'label': f"{row['ticker']}{year} [{row['period_bucket']}]",
+                        'text': preview_text(row['text']),
+                    }
+                )
+                if len(rows) >= max_examples:
+                    break
+            lookup[cluster_id] = rows
+
+    return lookup
+
+
 def build_contrast_rows(summary_df: pd.DataFrame, sampled_df: pd.DataFrame | None, representative_df: pd.DataFrame | None, args: argparse.Namespace) -> pd.DataFrame:
     if sampled_df is None:
         return pd.DataFrame()
@@ -208,7 +262,97 @@ def build_contrast_rows(summary_df: pd.DataFrame, sampled_df: pd.DataFrame | Non
     return pd.DataFrame(rows)
 
 
-def build_html(summary_df: pd.DataFrame, contrast_df: pd.DataFrame, args: argparse.Namespace, used_sampled_rows: bool) -> str:
+def build_full_catalog(summary_df: pd.DataFrame, contrast_df: pd.DataFrame, examples_lookup: dict[int, list[dict]]) -> list[dict]:
+    contrast_lookup = {}
+    if not contrast_df.empty:
+        contrast_lookup = {
+            int(row['cluster']): row.to_dict()
+            for _, row in contrast_df.iterrows()
+        }
+
+    catalog_df = summary_df.copy()
+    catalog_df['catalog_group'] = np.where(
+        catalog_df['cluster'] == -1,
+        2,
+        np.where(catalog_df['eligible_sector_shift'], 0, 1),
+    )
+    catalog_df = catalog_df.sort_values(['catalog_group', 'sector_signal_score', 'abs_delta', 'cluster_size'], ascending=[True, False, False, False])
+
+    cards: list[dict] = []
+    for _, row in catalog_df.iterrows():
+        cluster_id = int(row['cluster'])
+        contrast = contrast_lookup.get(cluster_id, {})
+        if cluster_id == -1:
+            status = 'Noise'
+        elif row['eligible_sector_shift']:
+            status = 'Notable broad shift'
+        else:
+            status = f"Documented but filtered ({row['exclusion_reason']})"
+
+        cards.append(
+            {
+                'cluster_label': row['cluster_label'],
+                'status': status,
+                'cluster_size': int(row['cluster_size']),
+                'ticker_count': int(row['ticker_count']),
+                'top_ticker_share': f"{float(row['top_ticker_share']):.1%}",
+                'post_minus_pre': f"{float(row['post_minus_pre']):+.1%}",
+                'sector_signal_score': f"{float(row['sector_signal_score']):.4f}",
+                'top_terms': row['top_terms'],
+                'top_tickers': row.get('top_tickers', ''),
+                'top_post_terms': contrast.get('top_post_terms', ''),
+                'top_pre_terms': contrast.get('top_pre_terms', ''),
+                'examples': examples_lookup.get(cluster_id, []),
+            }
+        )
+    return cards
+
+
+def render_catalog_cards(cards: list[dict]) -> str:
+    parts: list[str] = []
+    for card in cards:
+        examples_html = ''.join(
+            f"<li><strong>{html.escape(example['label'])}</strong>: {html.escape(example['text'])}</li>"
+            for example in card['examples']
+        ) or '<li>No example rows available for this cluster in the saved artifacts.</li>'
+
+        contrast_html = ''
+        if card['top_post_terms'] or card['top_pre_terms']:
+            contrast_html = (
+                '<div class="contrast-grid">'
+                f'<div><span class="mini-label">More post-2022</span><p>{html.escape(card["top_post_terms"] or "n/a")}</p></div>'
+                f'<div><span class="mini-label">More pre-2022</span><p>{html.escape(card["top_pre_terms"] or "n/a")}</p></div>'
+                '</div>'
+            )
+
+        parts.append(
+            f'''<article class="catalog-card">
+  <div class="catalog-header">
+    <div>
+      <h3>{html.escape(card['cluster_label'])}</h3>
+      <p class="catalog-status">{html.escape(card['status'])}</p>
+    </div>
+    <div class="catalog-metrics">
+      <span><strong>Size</strong> {card['cluster_size']}</span>
+      <span><strong>Tickers</strong> {card['ticker_count']}</span>
+      <span><strong>Top ticker share</strong> {card['top_ticker_share']}</span>
+      <span><strong>Delta</strong> {card['post_minus_pre']}</span>
+      <span><strong>Score</strong> {card['sector_signal_score']}</span>
+    </div>
+  </div>
+  <p><strong>Top terms:</strong> {html.escape(str(card['top_terms']))}</p>
+  <p><strong>Top tickers:</strong> {html.escape(str(card['top_tickers']))}</p>
+  {contrast_html}
+  <div>
+    <span class="mini-label">Example snippets</span>
+    <ul class="example-list">{examples_html}</ul>
+  </div>
+</article>'''
+        )
+    return '\n'.join(parts)
+
+
+def build_html(summary_df: pd.DataFrame, contrast_df: pd.DataFrame, args: argparse.Namespace, used_sampled_rows: bool, full_catalog_html: str) -> str:
     eligible = (
         summary_df[summary_df['eligible_sector_shift']]
         .sort_values(['sector_signal_score', 'abs_delta'], ascending=[False, False])
@@ -268,6 +412,17 @@ def build_html(summary_df: pd.DataFrame, contrast_df: pd.DataFrame, args: argpar
     tr:last-child td {{ border-bottom: none; }}
     .note {{ border-left: 4px solid var(--accent); padding-left: 14px; margin: 20px 0; }}
     code {{ background: #f1e9dc; padding: 2px 6px; border-radius: 6px; }}
+    .catalog-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-top: 18px; }}
+    .catalog-card {{ background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; box-shadow: 0 8px 28px rgba(21, 35, 45, 0.05); }}
+    .catalog-header {{ display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin-bottom: 10px; }}
+    .catalog-header h3 {{ margin: 0 0 4px; font-size: 1.2rem; }}
+    .catalog-status {{ margin: 0; color: var(--accent); font-weight: 600; }}
+    .catalog-metrics {{ display: grid; gap: 6px; font-size: 0.9rem; color: var(--muted); }}
+    .mini-label {{ display: inline-block; margin: 10px 0 6px; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }}
+    .contrast-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 12px 0; padding: 10px 12px; background: #f6efe4; border-radius: 12px; }}
+    .contrast-grid p {{ margin: 0; color: var(--ink); }}
+    .example-list {{ margin: 0; padding-left: 18px; color: var(--ink); }}
+    .example-list li {{ margin-bottom: 8px; }}
   </style>
 </head>
 <body>
@@ -291,6 +446,9 @@ def build_html(summary_df: pd.DataFrame, contrast_df: pd.DataFrame, args: argpar
     <div class="table-wrap">{excluded[['cluster_label','cluster_size','ticker_count','top_ticker_share','post_minus_pre','exclusion_reason','top_terms','top_tickers']].to_html(index=False, escape=False)}</div>
     <h2>Within-cluster pre/post contrasts</h2>
     <div class="table-wrap">{contrast_df.to_html(index=False, escape=False) if not contrast_df.empty else '<p>No contrast rows were generated for this run.</p>'}</div>
+    <h2>Full cluster catalog</h2>
+    <p>This section keeps every cluster in view. The notable broad movers stay first in the report, but all clusters are documented here with status labels and example snippets so we do not lose potentially useful edge cases.</p>
+    <div class="catalog-grid">{full_catalog_html}</div>
   </main>
 </body>
 </html>
@@ -315,6 +473,9 @@ def main() -> None:
     summary_df = summary_df.sort_values(['eligible_sector_shift', 'sector_signal_score', 'abs_delta'], ascending=[False, False, False]).reset_index(drop=True)
 
     contrast_df = build_contrast_rows(summary_df, sampled_df, representative_df, args)
+    examples_lookup = build_examples_lookup(sampled_df, representative_df, max_examples=2)
+    full_catalog = build_full_catalog(summary_df, contrast_df, examples_lookup)
+    full_catalog_html = render_catalog_cards(full_catalog)
 
     output_html_path.parent.mkdir(parents=True, exist_ok=True)
     output_csv_path.parent.mkdir(parents=True, exist_ok=True)
@@ -326,7 +487,7 @@ def main() -> None:
     elif output_contrast_csv_path.exists():
         output_contrast_csv_path.unlink()
 
-    html_text = build_html(summary_df, contrast_df, args, used_sampled_rows=sampled_df is not None)
+    html_text = build_html(summary_df, contrast_df, args, used_sampled_rows=sampled_df is not None, full_catalog_html=full_catalog_html)
     output_html_path.write_text(html_text, encoding='utf-8')
 
     print(f'Diagnostics HTML written to: {output_html_path}')
