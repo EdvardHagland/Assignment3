@@ -57,6 +57,8 @@ DEFAULT_DATASET_PATH = Path("data/final/sec_defense_risk_dataset.csv")
 EMERGENT_MATCH_TYPE = "new_post_only"
 CLUSTER_ANALYSIS_PROMPT_VERSION = 2
 ABSTRACT_PROMPT_VERSION = 2
+CONTENT_SHIFT_JUDGMENT = "same_cluster_shifted_contents"
+EMERGENT_JUDGMENT = "genuinely_new_theme"
 CONTINUITY_LABELS = {
     "largely_continuous": "Largely continuous",
     "same_cluster_shifted_contents": "Same cluster, shifted contents",
@@ -169,6 +171,12 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=6,
         help="Maximum number of interesting post clusters to send to Gemini.",
+    )
+    parser.add_argument(
+        "--persistent-audit-clusters",
+        type=int,
+        default=2,
+        help="How many broad persistent clusters to include as audits for same-cluster content drift.",
     )
     parser.add_argument(
         "--central-examples",
@@ -363,7 +371,7 @@ def ensure_theme_flags(summary_df: pd.DataFrame, args: argparse.Namespace) -> pd
     return summary
 
 
-def select_interesting_post_clusters(
+def build_post_selection_frame(
     summary_df: pd.DataFrame,
     matches_df: pd.DataFrame,
     interesting_match_types: list[str],
@@ -372,39 +380,134 @@ def select_interesting_post_clusters(
 ) -> pd.DataFrame:
     post_summary = ensure_theme_flags(summary_df, args)
     post_summary = post_summary[post_summary["period_bucket"] == POST_PERIOD].copy()
-    merged = post_summary.merge(
+    post_selection_df = post_summary.merge(
         matches_df,
         left_on="period_cluster_label",
         right_on="post_cluster_label",
         how="left",
     )
-    merged["match_type"] = merged["match_type"].fillna("new_post_only")
-    merged["match_label"] = merged["match_label"].fillna("New post-only")
-    merged["match_priority"] = merged["match_priority"].fillna(0)
-    merged["eligible_period_theme"] = coerce_bool_series(merged["eligible_period_theme"])
-    merged["eligible_emergent_theme"] = coerce_bool_series(merged["eligible_emergent_theme"])
-    merged["eligible_for_narration"] = np.where(
-        merged["match_type"] == EMERGENT_MATCH_TYPE,
-        merged["eligible_emergent_theme"],
-        merged["eligible_period_theme"],
+    post_selection_df["match_type"] = post_selection_df["match_type"].fillna("new_post_only")
+    post_selection_df["match_label"] = post_selection_df["match_label"].fillna("New post-only")
+    post_selection_df["match_priority"] = post_selection_df["match_priority"].fillna(0)
+    post_selection_df["eligible_period_theme"] = coerce_bool_series(post_selection_df["eligible_period_theme"])
+    post_selection_df["eligible_emergent_theme"] = coerce_bool_series(post_selection_df["eligible_emergent_theme"])
+    post_selection_df["eligible_for_narration"] = np.where(
+        post_selection_df["match_type"] == EMERGENT_MATCH_TYPE,
+        post_selection_df["eligible_emergent_theme"],
+        post_selection_df["eligible_period_theme"],
     )
-    merged["narration_filter"] = np.where(
-        merged["match_type"] == EMERGENT_MATCH_TYPE,
+    post_selection_df["narration_filter"] = np.where(
+        post_selection_df["match_type"] == EMERGENT_MATCH_TYPE,
         "emergent_discovery",
         "broad_structural",
     )
+    post_selection_df["main_candidate"] = (
+        (post_selection_df["period_cluster"] != -1)
+        & (post_selection_df["eligible_for_narration"].fillna(False))
+        & (post_selection_df["match_type"].isin(interesting_match_types))
+    )
+    post_selection_df["main_candidate_rank"] = np.nan
 
-    interesting = merged[
-        (merged["period_cluster"] != -1)
-        & (merged["eligible_for_narration"].fillna(False))
-        & (merged["match_type"].isin(interesting_match_types))
-    ].copy()
-
-    interesting = interesting.sort_values(
+    main_candidates = post_selection_df[post_selection_df["main_candidate"]].copy()
+    main_candidates = main_candidates.sort_values(
         ["match_priority", "period_share", "cluster_size", "best_pre_similarity"],
         ascending=[True, False, False, False],
-    ).head(max_clusters)
-    return interesting.reset_index(drop=True)
+    ).reset_index()
+    if not main_candidates.empty:
+        post_selection_df.loc[main_candidates["index"], "main_candidate_rank"] = np.arange(1, len(main_candidates) + 1)
+
+    post_selection_df["selected_main"] = post_selection_df["main_candidate_rank"].le(max_clusters).fillna(False)
+    post_selection_df["persistent_audit_candidate"] = (
+        (post_selection_df["period_cluster"] != -1)
+        & (post_selection_df["eligible_period_theme"].fillna(False))
+        & (post_selection_df["match_type"] == "persistent")
+        & (~post_selection_df["selected_main"])
+    )
+    post_selection_df["persistent_audit_rank"] = np.nan
+    persistent_audit_candidates = post_selection_df[post_selection_df["persistent_audit_candidate"]].copy()
+    persistent_audit_candidates = persistent_audit_candidates.sort_values(
+        ["period_share", "cluster_size", "best_pre_similarity"],
+        ascending=[False, False, True],
+    ).reset_index()
+    if not persistent_audit_candidates.empty:
+        post_selection_df.loc[persistent_audit_candidates["index"], "persistent_audit_rank"] = np.arange(1, len(persistent_audit_candidates) + 1)
+
+    post_selection_df["selected_persistent_audit"] = post_selection_df["persistent_audit_rank"].le(args.persistent_audit_clusters).fillna(False)
+    post_selection_df["selected_for_llm"] = post_selection_df["selected_main"] | post_selection_df["selected_persistent_audit"]
+    post_selection_df["selection_reason"] = ""
+    post_selection_df.loc[post_selection_df["selected_main"], "selection_reason"] = "main_match_filter"
+    post_selection_df.loc[post_selection_df["selected_persistent_audit"], "selection_reason"] = "persistent_audit"
+
+    post_selection_df.loc[
+        (post_selection_df["period_cluster"] == -1) & (~post_selection_df["selected_for_llm"]),
+        "selection_reason",
+    ] = "noise_cluster"
+    post_selection_df.loc[
+        (~post_selection_df["selected_for_llm"])
+        & (post_selection_df["match_type"] == EMERGENT_MATCH_TYPE)
+        & (~post_selection_df["eligible_emergent_theme"]),
+        "selection_reason",
+    ] = "failed_emergent_breadth_screen"
+    post_selection_df.loc[
+        (~post_selection_df["selected_for_llm"])
+        & (post_selection_df["match_type"] != EMERGENT_MATCH_TYPE)
+        & (~post_selection_df["eligible_period_theme"]),
+        "selection_reason",
+    ] = "failed_structural_breadth_screen"
+    post_selection_df.loc[
+        (~post_selection_df["selected_for_llm"])
+        & (post_selection_df["main_candidate"])
+        & (post_selection_df["main_candidate_rank"] > max_clusters),
+        "selection_reason",
+    ] = "trimmed_by_max_clusters"
+    post_selection_df.loc[
+        (~post_selection_df["selected_for_llm"])
+        & (post_selection_df["persistent_audit_candidate"])
+        & (post_selection_df["persistent_audit_rank"] > args.persistent_audit_clusters),
+        "selection_reason",
+    ] = "outside_persistent_audit_limit"
+    post_selection_df.loc[
+        (~post_selection_df["selected_for_llm"])
+        & (post_selection_df["selection_reason"] == "")
+        & (~post_selection_df["match_type"].isin(interesting_match_types))
+        & (post_selection_df["match_type"] != "persistent"),
+        "selection_reason",
+    ] = "match_type_not_requested"
+    post_selection_df.loc[
+        (~post_selection_df["selected_for_llm"])
+        & (post_selection_df["selection_reason"] == "")
+        & (post_selection_df["match_type"] == "persistent")
+        & (~post_selection_df["persistent_audit_candidate"]),
+        "selection_reason",
+    ] = "persistent_not_in_primary_filter"
+    post_selection_df.loc[
+        (~post_selection_df["selected_for_llm"])
+        & (post_selection_df["selection_reason"] == ""),
+        "selection_reason",
+    ] = "not_selected"
+    return post_selection_df
+
+
+def select_interesting_post_clusters(
+    summary_df: pd.DataFrame,
+    matches_df: pd.DataFrame,
+    interesting_match_types: list[str],
+    max_clusters: int,
+    args: argparse.Namespace,
+) -> pd.DataFrame:
+    post_selection_df = build_post_selection_frame(
+        summary_df=summary_df,
+        matches_df=matches_df,
+        interesting_match_types=interesting_match_types,
+        max_clusters=max_clusters,
+        args=args,
+    )
+    selected = post_selection_df[post_selection_df["selected_for_llm"]].copy()
+    selected = selected.sort_values(
+        ["selected_main", "main_candidate_rank", "selected_persistent_audit", "persistent_audit_rank", "period_share"],
+        ascending=[False, True, False, True, False],
+    )
+    return selected.reset_index(drop=True)
 
 
 def embed_texts(texts: list[str], model_name: str) -> np.ndarray:
@@ -1116,47 +1219,6 @@ def interesting_cluster_figure(interesting_df: pd.DataFrame, template_name: str)
     return fig
 
 
-def emergent_cluster_figure(interesting_df: pd.DataFrame, template_name: str) -> go.Figure:
-    emergent_df = interesting_df[interesting_df["match_type"] == EMERGENT_MATCH_TYPE].copy()
-    if emergent_df.empty:
-        fig = go.Figure()
-        fig.add_annotation(
-            text="No post-only clusters met the relaxed emergence screen.",
-            x=0.5,
-            y=0.5,
-            xref="paper",
-            yref="paper",
-            showarrow=False,
-        )
-        fig.update_layout(template=template_name, height=360, xaxis=dict(visible=False), yaxis=dict(visible=False))
-        return fig
-
-    plot_df = emergent_df.sort_values(["period_share", "cluster_size"], ascending=[False, False])
-    fig = px.bar(
-        plot_df,
-        x="period_share",
-        y="period_cluster_label",
-        orientation="h",
-        color="ticker_count",
-        template=template_name,
-        title="Emergent post-2022 themes with no strong pre analogue",
-        labels={
-            "period_share": "Share of sampled post rows",
-            "period_cluster_label": "Emergent post cluster",
-            "ticker_count": "Ticker count",
-        },
-        hover_data={
-            "cluster_size": True,
-            "filing_count": True,
-            "top_terms": True,
-            "best_pre_similarity": ":.2f",
-        },
-        color_continuous_scale=["#d8ebe7", "#1b998b", "#0f4c5c"],
-    )
-    fig.update_layout(height=max(360, 110 + 44 * len(plot_df)))
-    return fig
-
-
 def confidence_figure(cluster_cards: list[dict[str, Any]], template_name: str) -> go.Figure:
     if not cluster_cards:
         fig = go.Figure()
@@ -1184,6 +1246,16 @@ def confidence_figure(cluster_cards: list[dict[str, Any]], template_name: str) -
     fig.update_yaxes(visible=False, showticklabels=False)
     fig.update_layout(height=320)
     return fig
+
+
+def is_emergent_card(card: dict[str, Any]) -> bool:
+    judgment = str(card["analysis"].get("continuity_judgment", "")).strip()
+    return card["match_type"] == EMERGENT_MATCH_TYPE or judgment == EMERGENT_JUDGMENT
+
+
+def is_shifted_content_card(card: dict[str, Any]) -> bool:
+    judgment = str(card["analysis"].get("continuity_judgment", "")).strip()
+    return judgment == CONTENT_SHIFT_JUDGMENT and not is_emergent_card(card)
 
 
 def render_plot(fig: go.Figure) -> str:
@@ -1223,15 +1295,193 @@ def build_cluster_cards(
                     analysis.get("continuity_judgment", ""),
                     str(analysis.get("continuity_judgment", "")).replace("_", " ").strip().title(),
                 ),
+                "narration_filter": package.get("narration_filter", ""),
             }
         )
     return cards
 
 
-def split_cluster_cards(cluster_cards: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    emergent_cards = [card for card in cluster_cards if card["match_type"] == EMERGENT_MATCH_TYPE]
-    comparison_cards = [card for card in cluster_cards if card["match_type"] != EMERGENT_MATCH_TYPE]
-    return emergent_cards, comparison_cards
+def split_cluster_cards(
+    cluster_cards: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    emergent_cards = [card for card in cluster_cards if is_emergent_card(card)]
+    shifted_content_cards = [card for card in cluster_cards if is_shifted_content_card(card)]
+    comparison_cards = [
+        card for card in cluster_cards if not is_emergent_card(card) and not is_shifted_content_card(card)
+    ]
+    return emergent_cards, shifted_content_cards, comparison_cards
+
+
+def emergent_cluster_figure(cluster_cards: list[dict[str, Any]], template_name: str) -> go.Figure:
+    emergent_cards = [card for card in cluster_cards if is_emergent_card(card)]
+    if not emergent_cards:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="No narrated clusters were ultimately judged emergent in the final synthesis.",
+            x=0.5,
+            y=0.5,
+            xref="paper",
+            yref="paper",
+            showarrow=False,
+        )
+        fig.update_layout(template=template_name, height=360, xaxis=dict(visible=False), yaxis=dict(visible=False))
+        return fig
+
+    plot_df = pd.DataFrame(
+        {
+            "period_cluster_label": [card["post_cluster_label"] for card in emergent_cards],
+            "period_share": [card["period_share"] for card in emergent_cards],
+            "ticker_count": [card["ticker_count"] for card in emergent_cards],
+            "cluster_size": [card["cluster_size"] for card in emergent_cards],
+            "filing_count": [card["filing_count"] for card in emergent_cards],
+            "best_pre_similarity": [card["best_pre_similarity"] for card in emergent_cards],
+            "match_type": [card["match_type"] for card in emergent_cards],
+            "continuity_label": [card["continuity_label"] for card in emergent_cards],
+        }
+    ).sort_values(["period_share", "cluster_size"], ascending=[False, False])
+    fig = px.bar(
+        plot_df,
+        x="period_share",
+        y="period_cluster_label",
+        orientation="h",
+        color="ticker_count",
+        template=template_name,
+        title="Emergent themes after combining geometry and LLM judgment",
+        labels={
+            "period_share": "Share of sampled post rows",
+            "period_cluster_label": "Emergent post cluster",
+            "ticker_count": "Ticker count",
+        },
+        hover_data={
+            "cluster_size": True,
+            "filing_count": True,
+            "match_type": True,
+            "continuity_label": True,
+            "best_pre_similarity": ":.2f",
+        },
+        color_continuous_scale=["#d8ebe7", "#1b998b", "#0f4c5c"],
+    )
+    fig.update_layout(height=max(360, 110 + 44 * len(plot_df)))
+    return fig
+
+
+def content_shift_cluster_figure(cluster_cards: list[dict[str, Any]], template_name: str) -> go.Figure:
+    shifted_cards = [card for card in cluster_cards if is_shifted_content_card(card)]
+    if not shifted_cards:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="No narrated clusters were judged as stable families with shifted contents.",
+            x=0.5,
+            y=0.5,
+            xref="paper",
+            yref="paper",
+            showarrow=False,
+        )
+        fig.update_layout(template=template_name, height=360, xaxis=dict(visible=False), yaxis=dict(visible=False))
+        return fig
+
+    plot_df = pd.DataFrame(
+        {
+            "period_cluster_label": [card["post_cluster_label"] for card in shifted_cards],
+            "period_share": [card["period_share"] for card in shifted_cards],
+            "best_pre_similarity": [card["best_pre_similarity"] for card in shifted_cards],
+            "cluster_size": [card["cluster_size"] for card in shifted_cards],
+            "continuity_label": [card["continuity_label"] for card in shifted_cards],
+            "match_type": [card["match_type"] for card in shifted_cards],
+        }
+    ).sort_values(["period_share", "cluster_size"], ascending=[False, False])
+    fig = px.bar(
+        plot_df,
+        x="period_share",
+        y="period_cluster_label",
+        orientation="h",
+        color="best_pre_similarity",
+        template=template_name,
+        title="Stable cluster families with shifted post-2022 contents",
+        labels={
+            "period_share": "Share of sampled post rows",
+            "period_cluster_label": "Shifted-content cluster",
+            "best_pre_similarity": "Best pre cosine",
+        },
+        hover_data={"match_type": True, "continuity_label": True, "cluster_size": True},
+        color_continuous_scale=["#f3e5da", "#c56b3c", "#7a4023"],
+    )
+    fig.update_layout(height=max(360, 110 + 44 * len(plot_df)))
+    return fig
+
+
+def build_selection_diagnostics(
+    post_selection_df: pd.DataFrame,
+    cluster_cards: list[dict[str, Any]],
+    interesting_match_types: list[str],
+    args: argparse.Namespace,
+) -> pd.DataFrame:
+    diagnostics = post_selection_df.copy()
+    diagnostics["interesting_match_types"] = ",".join(interesting_match_types)
+    diagnostics["persistent_audit_clusters"] = int(args.persistent_audit_clusters)
+    card_lookup = {
+        card["post_cluster_label"]: {
+            "continuity_judgment": card["analysis"].get("continuity_judgment", ""),
+            "continuity_label": card["continuity_label"],
+            "report_section": (
+                "emergent_discoveries"
+                if is_emergent_card(card)
+                else "shifted_contents"
+                if is_shifted_content_card(card)
+                else "structural_comparisons"
+            ),
+            "gemini_confidence": card["analysis"].get("confidence", ""),
+        }
+        for card in cluster_cards
+    }
+    diagnostics["continuity_judgment"] = diagnostics["period_cluster_label"].map(
+        lambda label: card_lookup.get(str(label), {}).get("continuity_judgment", "")
+    )
+    diagnostics["continuity_label"] = diagnostics["period_cluster_label"].map(
+        lambda label: card_lookup.get(str(label), {}).get("continuity_label", "")
+    )
+    diagnostics["report_section"] = diagnostics["period_cluster_label"].map(
+        lambda label: card_lookup.get(str(label), {}).get("report_section", "")
+    )
+    diagnostics["gemini_confidence"] = diagnostics["period_cluster_label"].map(
+        lambda label: card_lookup.get(str(label), {}).get("gemini_confidence", "")
+    )
+    keep_columns = [
+        "period_cluster_label",
+        "match_type",
+        "match_label",
+        "cluster_size",
+        "period_share",
+        "ticker_count",
+        "filing_count",
+        "top_ticker_share",
+        "best_pre_cluster_label",
+        "best_pre_similarity",
+        "eligible_period_theme",
+        "eligible_emergent_theme",
+        "eligible_for_narration",
+        "main_candidate",
+        "main_candidate_rank",
+        "selected_main",
+        "persistent_audit_candidate",
+        "persistent_audit_rank",
+        "selected_persistent_audit",
+        "selected_for_llm",
+        "selection_reason",
+        "narration_filter",
+        "continuity_judgment",
+        "continuity_label",
+        "report_section",
+        "gemini_confidence",
+        "top_terms",
+        "interesting_match_types",
+        "persistent_audit_clusters",
+    ]
+    existing_columns = [column for column in keep_columns if column in diagnostics.columns]
+    return diagnostics[existing_columns].sort_values(
+        ["selected_for_llm", "main_candidate", "persistent_audit_candidate", "period_share", "cluster_size"],
+        ascending=[False, False, False, False, False],
+    ).reset_index(drop=True)
 
 
 def render_report(
@@ -1241,6 +1491,7 @@ def render_report(
     figures: dict[str, str],
     cluster_cards: list[dict[str, Any]],
     emergent_cards: list[dict[str, Any]],
+    shifted_content_cards: list[dict[str, Any]],
     comparison_cards: list[dict[str, Any]],
 ) -> str:
     template_path = Path(args.template)
@@ -1260,6 +1511,7 @@ def render_report(
         figures=figures,
         cluster_cards=cluster_cards,
         emergent_cards=emergent_cards,
+        shifted_content_cards=shifted_content_cards,
         comparison_cards=comparison_cards,
         model_name=args.model_name or os.getenv("GEMINI_MODEL", ""),
         generated_from=str(Path(args.sampled_rows).as_posix()),
@@ -1289,6 +1541,13 @@ def main() -> None:
     full_df = full_df[full_df["text"] != ""].copy()
 
     interesting_match_types = parse_match_types(args.interesting_match_types)
+    post_selection_df = build_post_selection_frame(
+        summary_df=summary_df,
+        matches_df=matches_df,
+        interesting_match_types=interesting_match_types,
+        max_clusters=args.max_clusters,
+        args=args,
+    )
     interesting_df = select_interesting_post_clusters(
         summary_df=summary_df,
         matches_df=matches_df,
@@ -1348,7 +1607,51 @@ def main() -> None:
     )
 
     cluster_cards = build_cluster_cards(cluster_packages, cluster_analyses)
-    emergent_cards, comparison_cards = split_cluster_cards(cluster_cards)
+    emergent_cards, shifted_content_cards, comparison_cards = split_cluster_cards(cluster_cards)
+    selection_diagnostics_df = build_selection_diagnostics(
+        post_selection_df=post_selection_df,
+        cluster_cards=cluster_cards,
+        interesting_match_types=interesting_match_types,
+        args=args,
+    )
+    selection_diagnostics_path = artifacts_dir / "llm_selection_diagnostics.csv"
+    selection_diagnostics_df.to_csv(selection_diagnostics_path, index=False)
+    selection_summary_path = artifacts_dir / "llm_selection_summary.json"
+    selection_summary = {
+        "total_post_clusters": int(len(post_selection_df)),
+        "selected_for_llm": int(post_selection_df["selected_for_llm"].sum()),
+        "selected_main": int(post_selection_df["selected_main"].sum()),
+        "selected_persistent_audit": int(post_selection_df["selected_persistent_audit"].sum()),
+        "selection_reason_counts": selection_diagnostics_df["selection_reason"].value_counts(dropna=False).to_dict(),
+        "report_section_counts": {
+            "emergent_discoveries": len(emergent_cards),
+            "shifted_contents": len(shifted_content_cards),
+            "structural_comparisons": len(comparison_cards),
+        },
+    }
+    write_json(selection_summary_path, selection_summary)
+    selection_log_lines = [
+        f"Total post clusters: {selection_summary['total_post_clusters']}",
+        f"Selected for LLM: {selection_summary['selected_for_llm']}",
+        f"Selected via main match filter: {selection_summary['selected_main']}",
+        f"Selected via persistent audit: {selection_summary['selected_persistent_audit']}",
+        "",
+        "Selection reasons:",
+    ]
+    selection_log_lines.extend(
+        f"- {reason}: {count}" for reason, count in selection_summary["selection_reason_counts"].items()
+    )
+    selection_log_lines.extend(
+        [
+            "",
+            "Final report sections:",
+            f"- emergent_discoveries: {selection_summary['report_section_counts']['emergent_discoveries']}",
+            f"- shifted_contents: {selection_summary['report_section_counts']['shifted_contents']}",
+            f"- structural_comparisons: {selection_summary['report_section_counts']['structural_comparisons']}",
+        ]
+    )
+    selection_log_path = artifacts_dir / "llm_selection_summary.txt"
+    selection_log_path.write_text("\n".join(selection_log_lines) + "\n", encoding="utf-8")
 
     template_name = build_plotly_template()
     pre_summary_df = summary_df[summary_df["period_bucket"] == PRE_PERIOD].copy()
@@ -1375,7 +1678,8 @@ def main() -> None:
         "post_cluster_share": period_cluster_share_figure(post_summary_df, POST_PERIOD, 10, template_name),
         "match_heatmap": match_heatmap_figure(pairwise_df, pre_summary_df, post_summary_df, 10, template_name),
         "post_match_status": post_match_status_figure(post_catalog_df, 10, template_name),
-        "emergent_clusters": emergent_cluster_figure(interesting_df, template_name),
+        "emergent_clusters": emergent_cluster_figure(cluster_cards, template_name),
+        "content_shift_clusters": content_shift_cluster_figure(cluster_cards, template_name),
         "interesting_clusters": interesting_cluster_figure(interesting_df, template_name),
         "analysis_confidence": confidence_figure(cluster_cards, template_name),
     }
@@ -1384,6 +1688,7 @@ def main() -> None:
     summary_metrics = {
         "interesting_clusters": f"{len(cluster_cards):,}",
         "emergent_discoveries": f"{len(emergent_cards):,}",
+        "content_shifts": f"{len(shifted_content_cards):,}",
         "structural_shifts": f"{len(comparison_cards):,}",
         "match_types": ", ".join(interesting_match_types),
         "embedding_model": embedding_model_name,
@@ -1404,6 +1709,7 @@ def main() -> None:
         figures=figures,
         cluster_cards=cluster_cards,
         emergent_cards=emergent_cards,
+        shifted_content_cards=shifted_content_cards,
         comparison_cards=comparison_cards,
     )
     output_html.write_text(html, encoding="utf-8")
@@ -1420,10 +1726,13 @@ def main() -> None:
         "embedding_model_name": embedding_model_name,
         "llm_model_name": model_name or "",
         "interesting_match_types": interesting_match_types,
+        "selection_diagnostics": str(selection_diagnostics_path),
+        "selection_summary": str(selection_summary_path),
         "emergent_min_cluster_size": args.emergent_min_cluster_size,
         "emergent_min_ticker_count": args.emergent_min_ticker_count,
         "emergent_min_filing_count": args.emergent_min_filing_count,
         "emergent_max_top_ticker_share": args.emergent_max_top_ticker_share,
+        "persistent_audit_clusters": args.persistent_audit_clusters,
         "skip_llm": bool(args.skip_llm),
         "allow_reembed": bool(args.allow_reembed),
         "narrated_clusters": len(cluster_cards),
@@ -1431,6 +1740,9 @@ def main() -> None:
     write_json(artifacts_dir / "llm_report_metadata.json", metadata_out)
 
     print(f"Rendered HTML report to: {output_html}")
+    print(f"Selection diagnostics written to: {selection_diagnostics_path}")
+    print(f"Selection summary written to: {selection_summary_path}")
+    print(f"Selection log written to: {selection_log_path}")
     print(f"Artifacts written to: {artifacts_dir}")
 
 

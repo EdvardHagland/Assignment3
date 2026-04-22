@@ -475,6 +475,7 @@
       <div class="hero-meta">
         <div class="metric"><div class="metric-label">Narrated clusters</div><div class="metric-value">{{ summary.interesting_clusters }}</div></div>
         <div class="metric"><div class="metric-label">Emergent discoveries</div><div class="metric-value">{{ summary.emergent_discoveries }}</div></div>
+        <div class="metric"><div class="metric-label">Content shifts</div><div class="metric-value">{{ summary.content_shifts }}</div></div>
         <div class="metric"><div class="metric-label">Structural shifts</div><div class="metric-value">{{ summary.structural_shifts }}</div></div>
         <div class="metric"><div class="metric-label">Match filters</div><div class="metric-value" style="font-size:0.95rem;">{{ summary.match_types }}</div></div>
         <div class="metric"><div class="metric-label">Companies</div><div class="metric-value">{{ summary.companies }}</div></div>
@@ -538,11 +539,11 @@
     <section class="section" id="emergence">
       <div class="section-header">
         <h2>Emergent post-2022 themes</h2>
-        <p>Broad <code>new_post_only</code> clusters are treated here as discoveries in their own right. The first question is not which pre cluster they map back to, but what themes became newly explicit in post-2022 risk disclosure language. This screen is intentionally a bit looser than the structural-comparison filter, because emergent themes can be newer and somewhat narrower while still spanning multiple firms and filings.</p>
+        <p>Broad <code>new_post_only</code> clusters are treated here as discoveries in their own right. But the final emergence call is not based on geometry alone: a cluster can also land here if Gemini judges the post-2022 contents to be genuinely new even when the centroid still sits close to a pre cluster. This screen is intentionally a bit looser than the structural-comparison filter, because emergent themes can be newer and somewhat narrower while still spanning multiple firms and filings.</p>
       </div>
       <div class="grid-2">
         <div class="figure-card">{{ figures.emergent_clusters | safe }}</div>
-        <div class="figure-card">{{ figures.interesting_clusters | safe }}</div>
+        <div class="figure-card">{{ figures.content_shift_clusters | safe }}</div>
       </div>
     </section>
 
@@ -560,7 +561,7 @@
     <section class="section" id="selection">
       <div class="section-header">
         <h2>Which clusters were narrated</h2>
-        <p>Only post-2022 clusters that already looked analytically interesting from the period-shift artifacts were passed to Gemini. Broad new post-only themes were prioritized as discovery candidates, alongside split/refined and merged cases.</p>
+        <p>Only post-2022 clusters that already looked analytically interesting from the period-shift artifacts were passed to Gemini. Broad new post-only themes were prioritized as discovery candidates, alongside split/refined and merged cases, and a small audit set of broad persistent clusters was included to catch same-family content drift that the embedding geometry might otherwise hide.</p>
       </div>
       <div class="grid-2">
         <div class="figure-card">{{ figures.interesting_clusters | safe }}</div>
@@ -663,7 +664,100 @@
         {% endfor %}
       </div>
       {% else %}
-      <div class="empty-note">No narrated clusters met the emergence screen, even after relaxing the breadth filter relative to the structural comparison cards.</div>
+      <div class="empty-note">No narrated clusters were ultimately classified as emergent, either by geometric novelty or by Gemini's content-based judgment.</div>
+      {% endif %}
+
+      <div class="subsection-head" style="margin-top:22px;">
+        <h3>Same families, shifted contents</h3>
+        <p>These clusters still look near an earlier thematic family in embedding space, but the post-2022 examples shift enough in emphasis or internal mix that Gemini judges the contents to have moved.</p>
+      </div>
+      {% if shifted_content_cards %}
+      <div class="clusters">
+        {% for cluster in shifted_content_cards %}
+        <article class="cluster-card" data-kind="{{ cluster.match_type }}">
+          <div class="cluster-head">
+            <h3>{{ cluster.post_cluster_label }}</h3>
+            <div class="cluster-meta">{{ cluster.cluster_size }} rows<br>{{ cluster.ticker_count }} tickers<br>{{ cluster.filing_count }} filings</div>
+          </div>
+          <span class="badge">{{ cluster.match_label }}</span>
+
+          <div class="analysis-box">
+            <h4>{{ cluster.analysis.card_title }}</h4>
+            <p><strong>{{ cluster.analysis.headline }}</strong> {{ cluster.analysis.interpretation }}</p>
+          </div>
+
+          <div class="stats">
+            <div class="stat-box"><strong>Post share</strong><span>{{ "%.1f"|format(cluster.period_share * 100) }}%</span></div>
+            <div class="stat-box"><strong>Best cosine</strong><span>{% if cluster.best_pre_similarity == cluster.best_pre_similarity %}{{ "%.2f"|format(cluster.best_pre_similarity) }}{% else %}n/a{% endif %}</span></div>
+            <div class="stat-box"><strong>Match</strong><span>{{ cluster.best_pre_cluster_label or "none" }}</span></div>
+            <div class="stat-box"><strong>Confidence</strong><span>{{ cluster.analysis.confidence }}</span></div>
+          </div>
+
+          <div class="cluster-text"><strong>Why it was selected</strong> {{ cluster.analysis.why_interesting }}</div>
+          <div class="cluster-text"><strong>Change reading</strong> {{ cluster.continuity_label }}. {{ cluster.analysis.continuity_note }}</div>
+          <div class="cluster-text"><strong>Post terms</strong> {{ cluster.top_terms }}</div>
+          {% if cluster.best_pre_top_terms %}
+          <div class="cluster-text"><strong>Best pre terms</strong> {{ cluster.best_pre_top_terms }}</div>
+          {% endif %}
+          {% if cluster.shared_terms %}
+          <div class="cluster-text"><strong>Shared terms</strong> {{ cluster.shared_terms }}</div>
+          {% endif %}
+          <div class="cluster-text"><strong>Genre caveat</strong> {{ cluster.analysis.genre_caveat }}</div>
+
+          <ul class="bullet-list">
+            {% for point in cluster.analysis.evidence_points %}
+            <li>{{ point }}</li>
+            {% endfor %}
+          </ul>
+
+          <div class="evidence-grid">
+            <div class="evidence-group">
+              <h5>Core post examples</h5>
+              {% for example in cluster.central_post_examples %}
+              <div class="example">
+                <div class="example-meta">{{ example.example_id }} · {{ example.ticker }} · {{ example.company_layer }} · {{ example.filing_year }}</div>
+                <p>{{ example.text_preview }}</p>
+              </div>
+              {% endfor %}
+            </div>
+
+            <div class="evidence-group">
+              <h5>Mid-distance post examples</h5>
+              {% for example in cluster.mid_post_examples %}
+              <div class="example">
+                <div class="example-meta">{{ example.example_id }} · {{ example.ticker }} · {{ example.company_layer }} · {{ example.filing_year }} · p={{ "%.2f"|format(example.distance_percentile) }}</div>
+                <p>{{ example.text_preview }}</p>
+              </div>
+              {% endfor %}
+            </div>
+
+            <div class="evidence-group">
+              <h5>Peripheral but still member examples</h5>
+              {% for example in cluster.peripheral_post_examples %}
+              <div class="example">
+                <div class="example-meta">{{ example.example_id }} · {{ example.ticker }} · {{ example.company_layer }} · {{ example.filing_year }} · p={{ "%.2f"|format(example.distance_percentile) }}</div>
+                <p>{{ example.text_preview }}</p>
+              </div>
+              {% endfor %}
+            </div>
+
+            {% if cluster.matched_pre_examples %}
+            <div class="evidence-group">
+              <h5>Matched pre-cluster context</h5>
+              {% for example in cluster.matched_pre_examples %}
+              <div class="example">
+                <div class="example-meta">{{ example.example_id }} · {{ example.ticker }} · {{ example.company_layer }} · {{ example.filing_year }}</div>
+                <p>{{ example.text_preview }}</p>
+              </div>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty-note">No narrated clusters were judged as stable families with shifted contents in the final synthesis.</div>
       {% endif %}
 
       <div class="subsection-head" style="margin-top:22px;">
