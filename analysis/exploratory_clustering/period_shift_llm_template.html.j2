@@ -433,6 +433,9 @@
   <nav class="nav">
     <a href="#overview">Overview</a>
     <a href="#abstract">Abstract</a>
+    <a href="#corpus">Corpus</a>
+    <a href="#discovery">Discovery</a>
+    <a href="#matching">Matching</a>
     <a href="#selection">Selection</a>
     <a href="#clusters">Cluster Cards</a>
     <a href="#catalog">Catalog</a>
@@ -446,10 +449,12 @@
       <div class="hero-meta">
         <div class="metric"><div class="metric-label">Narrated clusters</div><div class="metric-value">{{ summary.interesting_clusters }}</div></div>
         <div class="metric"><div class="metric-label">Match filters</div><div class="metric-value" style="font-size:0.95rem;">{{ summary.match_types }}</div></div>
+        <div class="metric"><div class="metric-label">Companies</div><div class="metric-value">{{ summary.companies }}</div></div>
+        <div class="metric"><div class="metric-label">Pre clusters</div><div class="metric-value">{{ summary.pre_clusters }}</div></div>
+        <div class="metric"><div class="metric-label">Post clusters</div><div class="metric-value">{{ summary.post_clusters }}</div></div>
         <div class="metric"><div class="metric-label">Embedding model</div><div class="metric-value" style="font-size:0.92rem;">{{ summary.embedding_model }}</div></div>
         <div class="metric"><div class="metric-label">LLM model</div><div class="metric-value" style="font-size:0.92rem;">{{ summary.llm_model }}</div></div>
         <div class="metric"><div class="metric-label">Sample rows</div><div class="metric-value">{{ summary.sample_rows }}</div></div>
-        <div class="metric"><div class="metric-label">Post-cluster rows</div><div class="metric-value">{{ summary.post_clusters }}</div></div>
       </div>
     </section>
 
@@ -477,10 +482,46 @@
       <p><strong>Caution:</strong> {{ abstract_data.closing_caution }}</p>
     </section>
 
+    <section class="section" id="corpus">
+      <div class="section-header">
+        <h2>Corpus and sample structure</h2>
+        <p>This final report keeps the full exploratory context visible. The Gemini layer is added after the clustering evidence has already been prepared, not instead of it.</p>
+      </div>
+      <div class="grid-2">
+        <div class="figure-card">{{ figures.corpus_overview | safe }}</div>
+        <div class="figure-card">{{ figures.sample_mix | safe }}</div>
+      </div>
+    </section>
+
+    <section class="section" id="discovery">
+      <div class="section-header">
+        <h2>Separate cluster discovery</h2>
+        <p>The report still shows the same shared embedding space and separate pre/post cluster systems. Gemini is only used after this evidence layer exists.</p>
+      </div>
+      <div class="grid-2">
+        <div class="figure-card" style="grid-column: 1 / -1;">{{ figures.shared_umap_period | safe }}</div>
+        <div class="figure-card">{{ figures.pre_cluster_space | safe }}</div>
+        <div class="figure-card">{{ figures.post_cluster_space | safe }}</div>
+        <div class="figure-card">{{ figures.pre_cluster_share | safe }}</div>
+        <div class="figure-card">{{ figures.post_cluster_share | safe }}</div>
+      </div>
+    </section>
+
+    <section class="section" id="matching">
+      <div class="section-header">
+        <h2>Approximate pre/post matching</h2>
+        <p>This is the structural comparison layer that determines which changed clusters are interesting enough to narrate.</p>
+      </div>
+      <div class="grid-2">
+        <div class="figure-card" style="grid-column: 1 / -1;">{{ figures.match_heatmap | safe }}</div>
+        <div class="figure-card" style="grid-column: 1 / -1;">{{ figures.post_match_status | safe }}</div>
+      </div>
+    </section>
+
     <section class="section" id="selection">
       <div class="section-header">
         <h2>Which clusters were narrated</h2>
-        <p>Only post-2022 clusters that already looked analytically interesting from the period-shift artifacts were passed to Gemini. The model then saw both core and moderately peripheral evidence, plus matched pre-cluster context when available.</p>
+        <p>Only post-2022 clusters that already looked analytically interesting from the period-shift artifacts were passed to Gemini. The final HTML is rendered only after those per-cluster Gemini calls finish.</p>
       </div>
       <div class="grid-2">
         <div class="figure-card">{{ figures.interesting_clusters | safe }}</div>

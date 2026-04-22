@@ -28,6 +28,17 @@ import plotly.io as pio
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from plotly.offline import get_plotlyjs
 
+from render_period_shift_report import (
+    build_display_sample,
+    corpus_overview_figure,
+    match_heatmap_figure,
+    period_cluster_share_figure,
+    period_cluster_space_figure,
+    post_match_status_figure,
+    sample_mix_figure,
+    shared_umap_period_figure,
+)
+
 
 DEFAULT_INTERESTING_MATCH_TYPES = ["new_post_only", "split/refined", "merged"]
 PRE_PERIOD = "pre_2022"
@@ -44,9 +55,19 @@ def parse_args() -> argparse.Namespace:
         help="Path to sampled_cluster_rows.csv from render_period_shift_report.py.",
     )
     parser.add_argument(
+        "--dataset",
+        default="",
+        help="Optional path to the canonical dataset. Falls back to the dataset path stored in period_shift_metadata.json.",
+    )
+    parser.add_argument(
         "--period-cluster-summary",
         default="analysis/exploratory_clustering/output/period_cluster_summary.csv",
         help="Path to period_cluster_summary.csv from render_period_shift_report.py.",
+    )
+    parser.add_argument(
+        "--pairwise-similarities",
+        default="analysis/exploratory_clustering/output/pairwise_cluster_similarities.csv",
+        help="Path to pairwise_cluster_similarities.csv from render_period_shift_report.py.",
     )
     parser.add_argument(
         "--cluster-matches",
@@ -170,12 +191,14 @@ def load_inputs(args: argparse.Namespace) -> dict[str, Any]:
     sampled_df = pd.read_csv(args.sampled_rows)
     summary_df = pd.read_csv(args.period_cluster_summary)
     matches_df = pd.read_csv(args.cluster_matches)
+    pairwise_df = pd.read_csv(args.pairwise_similarities)
     representative_df = pd.read_csv(args.representative_examples)
     metadata = read_json(Path(args.metadata)) if Path(args.metadata).exists() else {}
     return {
         "sampled_df": sampled_df,
         "summary_df": summary_df,
         "matches_df": matches_df,
+        "pairwise_df": pairwise_df,
         "representative_df": representative_df,
         "metadata": metadata,
     }
@@ -202,6 +225,15 @@ def resolve_embedding_model_name(args: argparse.Namespace, metadata: dict[str, A
     if model_name:
         return model_name
     raise ValueError("No embedding model available. Pass --embedding-model-name or supply period_shift_metadata.json.")
+
+
+def resolve_dataset_path(args: argparse.Namespace, metadata: dict[str, Any]) -> Path:
+    if args.dataset.strip():
+        return Path(args.dataset)
+    dataset_value = str(metadata.get("dataset", "")).strip()
+    if dataset_value:
+        return Path(dataset_value)
+    raise ValueError("No dataset path available. Pass --dataset or provide period_shift_metadata.json with a dataset entry.")
 
 
 def parse_match_types(value: str) -> list[str]:
@@ -812,8 +844,14 @@ def main() -> None:
     sampled_df = inputs["sampled_df"]
     summary_df = inputs["summary_df"]
     matches_df = inputs["matches_df"]
+    pairwise_df = inputs["pairwise_df"]
     representative_df = inputs["representative_df"]
     metadata = inputs["metadata"]
+    dataset_path = resolve_dataset_path(args, metadata)
+    full_df = pd.read_csv(dataset_path)
+    full_df = full_df[full_df["comparison_window"].isin(["pre_2018_2021", "post_2022_2025"])].copy()
+    full_df["text"] = full_df["text"].fillna("").astype(str).str.strip()
+    full_df = full_df[full_df["text"] != ""].copy()
 
     interesting_match_types = parse_match_types(args.interesting_match_types)
     interesting_df = select_interesting_post_clusters(
@@ -858,7 +896,21 @@ def main() -> None:
     cluster_cards = build_cluster_cards(cluster_packages, cluster_analyses)
 
     template_name = build_plotly_template()
+    pre_summary_df = summary_df[summary_df["period_bucket"] == PRE_PERIOD].copy()
+    post_summary_df = summary_df[summary_df["period_bucket"] == POST_PERIOD].copy()
+    global_display_df = build_display_sample(sampled_df, 4000, 42, "period_bucket")
+    pre_display_df = build_display_sample(sampled_df[sampled_df["period_bucket"] == PRE_PERIOD].copy(), 2000, 42, "period_cluster_label")
+    post_display_df = build_display_sample(sampled_df[sampled_df["period_bucket"] == POST_PERIOD].copy(), 2000, 42, "period_cluster_label")
     figure_objects = {
+        "corpus_overview": corpus_overview_figure(full_df, template_name),
+        "sample_mix": sample_mix_figure(sampled_df, template_name),
+        "shared_umap_period": shared_umap_period_figure(global_display_df, template_name),
+        "pre_cluster_space": period_cluster_space_figure(pre_display_df, PRE_PERIOD, template_name),
+        "post_cluster_space": period_cluster_space_figure(post_display_df, POST_PERIOD, template_name),
+        "pre_cluster_share": period_cluster_share_figure(pre_summary_df, PRE_PERIOD, 10, template_name),
+        "post_cluster_share": period_cluster_share_figure(post_summary_df, POST_PERIOD, 10, template_name),
+        "match_heatmap": match_heatmap_figure(pairwise_df, pre_summary_df, post_summary_df, 10, template_name),
+        "post_match_status": post_match_status_figure(post_catalog_df, 10, template_name),
         "interesting_clusters": interesting_cluster_figure(interesting_df, template_name),
         "analysis_confidence": confidence_figure(cluster_cards, template_name),
     }
@@ -870,7 +922,9 @@ def main() -> None:
         "embedding_model": embedding_model_name,
         "llm_model": model_name or "skipped",
         "sample_rows": f"{len(sampled_df):,}",
-        "post_clusters": f"{int((summary_df['period_bucket'] == POST_PERIOD).sum()):,}",
+        "companies": f"{full_df['ticker'].nunique():,}",
+        "pre_clusters": f"{int((pre_summary_df['period_cluster'] != -1).sum())}",
+        "post_clusters": f"{int((post_summary_df['period_cluster'] != -1).sum())}",
     }
 
     (artifacts_dir / "llm_cluster_evidence.json").write_text(json.dumps(cluster_packages, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -889,7 +943,9 @@ def main() -> None:
     metadata_out = {
         "output_html": str(output_html),
         "sampled_rows": args.sampled_rows,
+        "dataset": str(dataset_path),
         "period_cluster_summary": args.period_cluster_summary,
+        "pairwise_similarities": args.pairwise_similarities,
         "cluster_matches": args.cluster_matches,
         "representative_examples": args.representative_examples,
         "embedding_model_name": embedding_model_name,

@@ -135,11 +135,13 @@ The first exploratory pass is not meant to produce the final argument. It is mea
 4. Pair the thematic-structure findings with filing-level contrastive term or phrase analysis.
 5. Treat the legacy `render_exploratory_report.py` and `render_cluster_diagnostics.py` path as a comparison baseline, not the default workflow.
 
-## Block 8: Render the Gemini-assisted narrative report
+## Block 8: Render the final integrated Gemini-assisted report
 
 This second-stage pass assumes your Colab runtime already has access to `GEMINI_API_KEY` and `GEMINI_MODEL`.
 
 It does not send one giant prompt. It sends one structured request per interesting post cluster, saves those outputs, then asks Gemini for one abstract on top of the cluster-level analyses.
+
+The final HTML is rendered after those Gemini calls finish, so the abstract and cluster writeups are integrated into the same report HTML together with the clustering figures.
 
 ```python
 !python analysis/exploratory_clustering/render_period_shift_llm_report.py \
