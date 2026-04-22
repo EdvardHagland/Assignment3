@@ -403,6 +403,36 @@
       color: var(--accent);
     }
 
+    .evidence-group summary {
+      list-style: none;
+      cursor: pointer;
+      margin: 0;
+      font-size: 0.76rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    .evidence-group summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .evidence-group summary::after {
+      content: "Show";
+      float: right;
+      font-size: 0.68rem;
+      color: var(--muted);
+    }
+
+    .evidence-group[open] summary {
+      margin-bottom: 8px;
+    }
+
+    .evidence-group[open] summary::after {
+      content: "Hide";
+    }
+
     .example {
       padding: 10px 12px;
       border-radius: 12px;
@@ -618,15 +648,15 @@
           </ul>
 
           <div class="evidence-grid">
-            <div class="evidence-group">
-              <h5>Core post examples</h5>
+            <details class="evidence-group">
+              <summary>Core post examples ({{ cluster.central_post_examples | length }})</summary>
               {% for example in cluster.central_post_examples %}
               <div class="example">
                 <div class="example-meta">{{ example.example_id }} · {{ example.ticker }} · {{ example.company_layer }} · {{ example.filing_year }}</div>
                 <p>{{ example.text_preview }}</p>
               </div>
               {% endfor %}
-            </div>
+            </details>
 
             <div class="evidence-group">
               <h5>Mid-distance post examples</h5>
@@ -711,15 +741,15 @@
           </ul>
 
           <div class="evidence-grid">
-            <div class="evidence-group">
-              <h5>Core post examples</h5>
+            <details class="evidence-group">
+              <summary>Core post examples ({{ cluster.central_post_examples | length }})</summary>
               {% for example in cluster.central_post_examples %}
               <div class="example">
                 <div class="example-meta">{{ example.example_id }} · {{ example.ticker }} · {{ example.company_layer }} · {{ example.filing_year }}</div>
                 <p>{{ example.text_preview }}</p>
               </div>
               {% endfor %}
-            </div>
+            </details>
 
             <div class="evidence-group">
               <h5>Mid-distance post examples</h5>
@@ -804,15 +834,15 @@
           </ul>
 
           <div class="evidence-grid">
-            <div class="evidence-group">
-              <h5>Core post examples</h5>
+            <details class="evidence-group">
+              <summary>Core post examples ({{ cluster.central_post_examples | length }})</summary>
               {% for example in cluster.central_post_examples %}
               <div class="example">
                 <div class="example-meta">{{ example.example_id }} · {{ example.ticker }} · {{ example.company_layer }} · {{ example.filing_year }}</div>
                 <p>{{ example.text_preview }}</p>
               </div>
               {% endfor %}
-            </div>
+            </details>
 
             <div class="evidence-group">
               <h5>Mid-distance post examples</h5>
