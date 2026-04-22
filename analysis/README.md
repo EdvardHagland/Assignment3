@@ -5,15 +5,23 @@ This folder is for the interpretation and notebook side of the project.
 Current starter files:
 
 - [COLAB_README.md](/C:/Users/edvar/Assignment3/analysis/COLAB_README.md)
-  - copy-paste Google Colab blocks for loading the corpus, optionally regenerating it, and rendering a first exploratory clustering HTML report
+  - copy-paste Google Colab blocks for loading the corpus, optionally regenerating it, and rendering the maintained period-shift clustering report
 - [exploratory_clustering/README.md](/C:/Users/edvar/Assignment3/analysis/exploratory_clustering/README.md)
-  - the exploratory clustering workflow and supporting diagnostics for pre/post-2022 analysis
+  - the exploratory clustering workflow for separate pre/post discovery and approximate cluster matching
 
 Main analysis files:
 
+- [render_period_shift_report.py](/C:/Users/edvar/Assignment3/analysis/exploratory_clustering/render_period_shift_report.py)
+  - embeds the balanced sample once, clusters `pre_2022` and `post_2022` separately, matches post clusters back to pre clusters, and writes the main HTML/PDF/CSV artifacts
+- [period_shift_template.html.j2](/C:/Users/edvar/Assignment3/analysis/exploratory_clustering/period_shift_template.html.j2)
+  - custom report layout and styling for the period-shift report
+- [render_period_shift_llm_report.py](/C:/Users/edvar/Assignment3/analysis/exploratory_clustering/render_period_shift_llm_report.py)
+  - second-stage Gemini-assisted narrative report that packages evidence for interesting changed clusters and writes an executive abstract plus evidence-aware cluster cards
+- [period_shift_llm_template.html.j2](/C:/Users/edvar/Assignment3/analysis/exploratory_clustering/period_shift_llm_template.html.j2)
+  - template used by the Gemini-assisted narrative report
 - [render_exploratory_report.py](/C:/Users/edvar/Assignment3/analysis/exploratory_clustering/render_exploratory_report.py)
-  - builds embeddings, clusters the balanced sample, and writes a polished HTML report, an optional PDF, and CSV artifacts
+  - legacy single-map clustering report kept for comparison with the older workflow
 - [report_template.html.j2](/C:/Users/edvar/Assignment3/analysis/exploratory_clustering/report_template.html.j2)
-  - custom report layout and styling for the compiled HTML output
+  - template used by the legacy single-map report
 - [render_cluster_diagnostics.py](/C:/Users/edvar/Assignment3/analysis/exploratory_clustering/render_cluster_diagnostics.py)
-  - CPU-only post-processing that re-ranks saved clusters by relative change, filters concentrated clusters, and computes within-cluster pre/post contrast terms
+  - CPU-only post-processing for legacy global-clustering artifacts

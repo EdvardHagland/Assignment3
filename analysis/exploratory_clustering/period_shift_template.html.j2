@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ title }}</title>
+  <script>{{ plotly_js | safe }}</script>
+  <style>
+    :root {
+      --ink: #1a2a35;
+      --ink-soft: #425868;
+      --muted: #667988;
+      --faint: #93a2ad;
+      --paper: #f5f1e7;
+      --card: #fffdf8;
+      --line: #ddd1be;
+      --line-soft: #ece3d5;
+      --accent: #0f4c5c;
+      --teal: #1b998b;
+      --warm: #c56b3c;
+      --olive: #5a8a3e;
+      --soft-blue: #3e6c8f;
+      --shadow: 0 2px 8px rgba(19, 33, 44, 0.05), 0 12px 28px rgba(19, 33, 44, 0.07);
+      --r: 18px;
+      --r-lg: 24px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 56px; }
+    body {
+      margin: 0;
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: radial-gradient(circle at top right, rgba(15, 76, 92, 0.06), transparent 28%), var(--paper);
+      line-height: 1.6;
+    }
+
+    .accent-bar {
+      height: 4px;
+      background: linear-gradient(90deg, var(--accent), var(--teal), var(--warm));
+    }
+
+    .nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      gap: 8px;
+      padding: 12px 18px;
+      background: rgba(245, 241, 231, 0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--line-soft);
+      overflow-x: auto;
+    }
+
+    .nav a {
+      text-decoration: none;
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 700;
+      padding: 6px 12px;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+
+    .nav a:hover, .nav a.active {
+      background: rgba(15, 76, 92, 0.10);
+      color: var(--accent);
+    }
+
+    .page {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 28px 22px 80px;
+    }
+
+    .hero, .section {
+      background: var(--card);
+      border: 1px solid var(--line-soft);
+      border-radius: var(--r-lg);
+      box-shadow: var(--shadow);
+    }
+
+    .hero {
+      padding: 42px 46px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      right: -70px;
+      bottom: -90px;
+      width: 240px;
+      height: 240px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(15, 76, 92, 0.09), transparent 65%);
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      display: inline-block;
+      padding: 5px 12px;
+      border-radius: 999px;
+      background: rgba(15, 76, 92, 0.08);
+      color: var(--accent);
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 14px 0 10px;
+      font-family: "Source Serif 4", Georgia, serif;
+      font-size: clamp(2rem, 3.8vw, 3.25rem);
+      line-height: 1.08;
+    }
+
+    .subtitle {
+      max-width: 68ch;
+      color: var(--muted);
+      font-size: 1rem;
+    }
+
+    .hero-meta {
+      margin-top: 28px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 12px;
+    }
+
+    .metric {
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.88);
+      border: 1px solid var(--line-soft);
+    }
+
+    .metric-label {
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .metric-value {
+      margin-top: 4px;
+      font-size: 1.52rem;
+      font-weight: 800;
+      color: var(--accent);
+      line-height: 1.15;
+    }
+
+    .section {
+      margin-top: 20px;
+      padding: 28px 32px;
+    }
+
+    .section-header {
+      margin-bottom: 20px;
+    }
+
+    .section-header h2 {
+      margin: 0;
+      font-family: "Source Serif 4", Georgia, serif;
+      font-size: 1.45rem;
+    }
+
+    .section-header p {
+      margin: 8px 0 0;
+      max-width: 74ch;
+      color: var(--muted);
+      font-size: 0.94rem;
+    }
+
+    .method-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 10px;
+    }
+
+    .method-chip {
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: rgba(15, 76, 92, 0.05);
+      border: 1px solid rgba(15, 76, 92, 0.12);
+      font-size: 0.89rem;
+    }
+
+    .method-chip strong {
+      display: block;
+      margin-bottom: 3px;
+      color: var(--accent);
+      font-size: 0.7rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+
+    .figure-card {
+      padding: 14px;
+      border-radius: var(--r);
+      background: var(--card);
+      border: 1px solid var(--line-soft);
+    }
+
+    .figure-card.full {
+      grid-column: 1 / -1;
+    }
+
+    .figure-note {
+      margin: 0 0 8px;
+      font-size: 0.84rem;
+      color: var(--faint);
+      font-style: italic;
+    }
+
+    .figure-card .plotly-graph-div {
+      width: 100% !important;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--line-soft);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.75);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+
+    th, td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line-soft);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: rgba(15, 76, 92, 0.04);
+    }
+
+    td small {
+      color: var(--faint);
+    }
+
+    .clusters {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      gap: 16px;
+    }
+
+    .cluster-card {
+      padding: 22px;
+      border-radius: var(--r);
+      background: var(--card);
+      border: 1px solid var(--line-soft);
+      border-top: 4px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .cluster-card[data-kind="new_post_only"] { border-top-color: var(--accent); }
+    .cluster-card[data-kind="split/refined"] { border-top-color: var(--teal); }
+    .cluster-card[data-kind="merged"] { border-top-color: var(--warm); }
+    .cluster-card[data-kind="persistent"] { border-top-color: var(--olive); }
+    .cluster-card[data-kind="approximate_overlap"] { border-top-color: var(--soft-blue); }
+
+    .cluster-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .cluster-head h3 {
+      margin: 0;
+      font-size: 1.06rem;
+    }
+
+    .cluster-meta {
+      text-align: right;
+      font-size: 0.8rem;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      background: rgba(15, 76, 92, 0.10);
+      color: var(--accent);
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    .stat-box {
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(15, 76, 92, 0.05);
+    }
+
+    .stat-box strong {
+      display: block;
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--faint);
+      margin-bottom: 2px;
+    }
+
+    .stat-box span {
+      font-size: 1rem;
+      font-weight: 800;
+    }
+
+    .cluster-text {
+      font-size: 0.9rem;
+      color: var(--ink-soft);
+    }
+
+    .cluster-text strong {
+      color: var(--muted);
+      font-size: 0.74rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .examples {
+      display: grid;
+      gap: 8px;
+    }
+
+    .example {
+      padding: 11px 13px;
+      border-radius: 12px;
+      background: var(--paper);
+      border-left: 3px solid var(--line);
+    }
+
+    .example-meta {
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--faint);
+    }
+
+    .example p {
+      margin: 5px 0 0;
+      font-size: 0.87rem;
+      color: var(--ink-soft);
+    }
+
+    details summary {
+      cursor: pointer;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .footer {
+      margin-top: 24px;
+      text-align: center;
+      color: var(--faint);
+      font-size: 0.84rem;
+    }
+
+    .footer code {
+      background: rgba(15, 76, 92, 0.06);
+      padding: 2px 6px;
+      border-radius: 6px;
+    }
+
+    @media (max-width: 900px) {
+      .page { padding: 16px 12px 60px; }
+      .hero { padding: 28px 22px; }
+      .section { padding: 22px 18px; }
+      .grid-2 { grid-template-columns: 1fr; }
+      .clusters { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="accent-bar"></div>
+
+  <nav class="nav">
+    <a href="#overview">Overview</a>
+    <a href="#method">Method</a>
+    <a href="#corpus">Corpus</a>
+    <a href="#discovery">Discovery</a>
+    <a href="#matching">Matching</a>
+    <a href="#clusters">Post Clusters</a>
+    <a href="#catalog">Catalog</a>
+  </nav>
+
+  <div class="page">
+    <section class="hero" id="overview">
+      <div class="eyebrow">Exploratory report</div>
+      <h1>{{ title }}</h1>
+      <p class="subtitle">{{ subtitle }}</p>
+      <div class="hero-meta">
+        <div class="metric"><div class="metric-label">Full corpus</div><div class="metric-value">{{ summary.full_rows }}</div></div>
+        <div class="metric"><div class="metric-label">Sample</div><div class="metric-value">{{ summary.sample_rows }}</div></div>
+        <div class="metric"><div class="metric-label">Companies</div><div class="metric-value">{{ summary.companies }}</div></div>
+        <div class="metric"><div class="metric-label">Pre clusters</div><div class="metric-value">{{ summary.pre_clusters }}</div></div>
+        <div class="metric"><div class="metric-label">Post clusters</div><div class="metric-value">{{ summary.post_clusters }}</div></div>
+        <div class="metric"><div class="metric-label">Matched post</div><div class="metric-value">{{ summary.matched_post_clusters }}</div></div>
+        <div class="metric"><div class="metric-label">New post-only</div><div class="metric-value">{{ summary.new_post_clusters }}</div></div>
+        <div class="metric"><div class="metric-label">Noise</div><div class="metric-value">{{ summary.noise_share }}</div></div>
+      </div>
+    </section>
+
+    <section class="section" id="method">
+      <div class="section-header">
+        <h2>Method at a glance</h2>
+        <p>The key design choice here is shared embeddings but separate cluster discovery. That lets us compare thematic structure without forcing both periods into one cluster system.</p>
+      </div>
+      <div class="method-strip">
+        <div class="method-chip"><strong>Corpus</strong>SEC 10-K Item 1A risk disclosures across primes and suppliers.</div>
+        <div class="method-chip"><strong>Embedding</strong>{{ model_name }} embeds the sampled rows once, identically across both periods.</div>
+        <div class="method-chip"><strong>Discovery</strong>Pre-2022 and post-2022 rows are clustered separately with UMAP plus HDBSCAN.</div>
+        <div class="method-chip"><strong>Matching</strong>Post clusters are matched back to pre clusters using centroid cosine similarity, top-term overlap, and close reading support.</div>
+        <div class="method-chip"><strong>Interpretation</strong>Use this for thematic emergence and refinement, not literal one-to-one cluster identity claims.</div>
+        <div class="method-chip"><strong>Sample</strong>Up to {{ sample_per_period }} rows per period bucket.</div>
+      </div>
+    </section>
+
+    <section class="section" id="corpus">
+      <div class="section-header">
+        <h2>Corpus structure</h2>
+        <p>The descriptive base is still the full corpus. The clustering pass uses a balanced sample so the larger post period does not automatically dominate the geometry.</p>
+      </div>
+      <div class="grid-2">
+        <div class="figure-card">
+          <p class="figure-note">Full corpus volume by year and company layer.</p>
+          {{ figures.corpus_overview | safe }}
+        </div>
+        <div class="figure-card">
+          <p class="figure-note">The balanced sample the embedding and clustering workflow actually sees.</p>
+          {{ figures.sample_mix | safe }}
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="discovery">
+      <div class="section-header">
+        <h2>Separate cluster discovery</h2>
+        <p>The first chart shows the shared embedding space by period. The next four panels then switch to period-specific clustering views, so pre and post get to organize around their own local point populations.</p>
+      </div>
+      <div class="grid-2">
+        <div class="figure-card full">
+          <p class="figure-note">Same embeddings for every row, before any period-specific cluster discovery.</p>
+          {{ figures.shared_umap_period | safe }}
+        </div>
+        <div class="figure-card">{{ figures.pre_cluster_space | safe }}</div>
+        <div class="figure-card">{{ figures.post_cluster_space | safe }}</div>
+        <div class="figure-card">{{ figures.pre_cluster_share | safe }}</div>
+        <div class="figure-card">{{ figures.post_cluster_share | safe }}</div>
+      </div>
+    </section>
+
+    <section class="section" id="matching">
+      <div class="section-header">
+        <h2>Approximate pre/post matching</h2>
+        <p>These comparisons are approximate by design. The heatmap shows centroid similarity among the highlighted clusters, while the bar chart summarizes how the most important post clusters map back to the earlier structure.</p>
+      </div>
+      <div class="grid-2">
+        <div class="figure-card full">{{ figures.match_heatmap | safe }}</div>
+        <div class="figure-card full">{{ figures.post_match_status | safe }}</div>
+      </div>
+      <div class="table-wrap" style="margin-top: 16px;">
+        <table>
+          <thead>
+            <tr>
+              <th>Post cluster</th>
+              <th>Match type</th>
+              <th>Best pre analog</th>
+              <th>Cosine</th>
+              <th>Shared terms</th>
+              <th>Post terms</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in match_rows %}
+            <tr>
+              <td><strong>{{ row.period_cluster_label }}</strong></td>
+              <td>{{ row.match_label }}</td>
+              <td>{{ row.best_pre_cluster_label or "none" }}</td>
+              <td>{% if row.best_pre_similarity == row.best_pre_similarity %}{{ "%.2f"|format(row.best_pre_similarity) }}{% else %}n/a{% endif %}</td>
+              <td>{{ row.shared_terms or "none" }}</td>
+              <td>{{ row.top_terms }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section" id="clusters">
+      <div class="section-header">
+        <h2>Highlighted post-2022 clusters</h2>
+        <p>These cards foreground the post clusters that are most useful for interpreting thematic emergence, refinement, persistence, or recombination after 2022.</p>
+      </div>
+      <div class="clusters">
+        {% for cluster in post_cluster_cards %}
+        <article class="cluster-card" data-kind="{{ cluster.match_type }}">
+          <div class="cluster-head">
+            <h3>{{ cluster.cluster_label }}</h3>
+            <div class="cluster-meta">{{ cluster.cluster_size }} rows<br>{{ cluster.ticker_count }} tickers<br>{{ cluster.filing_count }} filings</div>
+          </div>
+          <span class="badge">{{ cluster.match_label }}</span>
+
+          <div class="stats">
+            <div class="stat-box"><strong>Post share</strong><span>{{ "%.1f"|format(cluster.period_share * 100) }}%</span></div>
+            <div class="stat-box"><strong>Best cosine</strong><span>{% if cluster.best_pre_similarity == cluster.best_pre_similarity %}{{ "%.2f"|format(cluster.best_pre_similarity) }}{% else %}n/a{% endif %}</span></div>
+            <div class="stat-box"><strong>Prime mix</strong><span>{{ "%.1f"|format(cluster.prime_share * 100) }}%</span></div>
+            <div class="stat-box"><strong>Supplier mix</strong><span>{{ "%.1f"|format(cluster.supplier_share * 100) }}%</span></div>
+          </div>
+
+          <div class="cluster-text"><strong>Post terms</strong> {{ cluster.top_terms }}</div>
+          {% if cluster.best_pre_cluster_label %}
+          <div class="cluster-text"><strong>Best pre analog</strong> {{ cluster.best_pre_cluster_label }}</div>
+          {% endif %}
+          {% if cluster.best_pre_top_terms %}
+          <div class="cluster-text"><strong>Best pre terms</strong> {{ cluster.best_pre_top_terms }}</div>
+          {% endif %}
+          {% if cluster.shared_terms %}
+          <div class="cluster-text"><strong>Shared terms</strong> {{ cluster.shared_terms }}</div>
+          {% endif %}
+          {% if cluster.top_tickers %}
+          <div class="cluster-text"><strong>Top tickers</strong> {{ cluster.top_tickers }}</div>
+          {% endif %}
+          <div class="cluster-text"><strong>Interpretation</strong> {{ cluster.match_note }}</div>
+
+          <div class="examples">
+            {% for example in cluster.examples[:2] %}
+            <div class="example">
+              <div class="example-meta">{{ example.ticker }} · {{ example.company_layer }} · {{ example.filing_year }} · {{ example.period_bucket }}</div>
+              <p>{{ example.text }}</p>
+            </div>
+            {% endfor %}
+            {% if cluster.matched_examples %}
+            <div class="example">
+              <div class="example-meta">Closest pre example</div>
+              <p>{{ cluster.matched_examples[0].ticker }} · {{ cluster.matched_examples[0].company_layer }} · {{ cluster.matched_examples[0].filing_year }} · {{ cluster.matched_examples[0].period_bucket }}<br>{{ cluster.matched_examples[0].text }}</p>
+            </div>
+            {% endif %}
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="section" id="catalog">
+      <div class="section-header">
+        <h2>Post-cluster catalog</h2>
+        <p>All discovered post-2022 clusters, not just the highlighted ones.</p>
+      </div>
+      <details>
+        <summary>{{ all_post_cluster_cards | length }} post clusters total</summary>
+        <div class="clusters" style="margin-top: 16px;">
+          {% for cluster in all_post_cluster_cards %}
+          <article class="cluster-card" data-kind="{{ cluster.match_type }}">
+            <div class="cluster-head">
+              <h3>{{ cluster.cluster_label }}</h3>
+              <div class="cluster-meta">{{ cluster.cluster_size }} rows<br>{{ cluster.ticker_count }} tickers</div>
+            </div>
+            <span class="badge">{{ cluster.match_label }}</span>
+            <div class="cluster-text"><strong>Post terms</strong> {{ cluster.top_terms }}</div>
+            <div class="cluster-text"><strong>Best pre analog</strong> {{ cluster.best_pre_cluster_label or "none" }}</div>
+            <div class="cluster-text"><strong>Interpretation</strong> {{ cluster.match_note }}</div>
+          </article>
+          {% endfor %}
+        </div>
+      </details>
+    </section>
+
+    <p class="footer">
+      Generated from <code>{{ generated_from }}</code><br>
+      Exploratory: use this to understand how the thematic structure changed, then pair it with filing-level contrastive analysis for the final argument.
+    </p>
+  </div>
+
+  <script>
+  (function() {
+    var links = document.querySelectorAll('.nav a');
+    var sections = document.querySelectorAll('.hero[id], .section[id]');
+    var map = {};
+    links.forEach(function(link) { map[link.getAttribute('href').slice(1)] = link; });
+    var observer = new IntersectionObserver(function(entries) {
+      entries.forEach(function(entry) {
+        if (entry.isIntersecting && map[entry.target.id]) {
+          links.forEach(function(link) { link.classList.remove('active'); });
+          map[entry.target.id].classList.add('active');
+        }
+      });
+    }, { rootMargin: '-20% 0px -65% 0px' });
+    sections.forEach(function(section) { observer.observe(section); });
+  })();
+  </script>
+</body>
+</html>

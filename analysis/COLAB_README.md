@@ -80,30 +80,32 @@ display(df.groupby("ticker").size().sort_values(ascending=False).head(15))
 df[["annotation_id", "ticker", "company_layer", "filing_year", "period_bucket", "text"]].sample(5, random_state=42)
 ```
 
-## Block 6: Render the HTML report and PDF
+## Block 6: Render the period-shift HTML report and PDF
 
-This is now the main exploratory path.
+This is now the recommended exploratory path.
 
 The current default model is `BAAI/bge-m3`.
 
 ```python
-!python analysis/exploratory_clustering/render_exploratory_report.py \
+!python analysis/exploratory_clustering/render_period_shift_report.py \
     --model-name BAAI/bge-m3 \
     --sample-per-period 3000 \
     --scatter-display-max-points 3500 \
     --cluster-min-size 80 \
-    --output-html analysis/exploratory_clustering/output/exploratory_clustering_report.html \
-    --output-pdf analysis/exploratory_clustering/output/exploratory_clustering_report.pdf
+    --output-html analysis/exploratory_clustering/output/period_shift_report.html \
+    --output-pdf analysis/exploratory_clustering/output/period_shift_report.pdf
 ```
 
 This will write:
 
-- `analysis/exploratory_clustering/output/exploratory_clustering_report.html`
-- `analysis/exploratory_clustering/output/exploratory_clustering_report.pdf`
+- `analysis/exploratory_clustering/output/period_shift_report.html`
+- `analysis/exploratory_clustering/output/period_shift_report.pdf`
 - `analysis/exploratory_clustering/output/sampled_cluster_rows.csv`
-- `analysis/exploratory_clustering/output/cluster_summary.csv`
+- `analysis/exploratory_clustering/output/period_cluster_summary.csv`
+- `analysis/exploratory_clustering/output/cluster_matches.csv`
+- `analysis/exploratory_clustering/output/pairwise_cluster_similarities.csv`
 - `analysis/exploratory_clustering/output/representative_examples.csv`
-- `analysis/exploratory_clustering/output/report_metadata.json`
+- `analysis/exploratory_clustering/output/period_shift_metadata.json`
 
 The HTML stays interactive. The PDF is the safer static sharing version.
 
@@ -111,50 +113,62 @@ The HTML stays interactive. The PDF is the safer static sharing version.
 
 ```python
 from google.colab import files
-files.download("analysis/exploratory_clustering/output/exploratory_clustering_report.html")
-files.download("analysis/exploratory_clustering/output/exploratory_clustering_report.pdf")
+files.download("analysis/exploratory_clustering/output/period_shift_report.html")
+files.download("analysis/exploratory_clustering/output/period_shift_report.pdf")
 ```
 
 ## What we want from this first pass
 
 The first exploratory pass is not meant to produce the final argument. It is meant to help us answer:
 
-- do pre- and post-2022 texts distribute differently across clusters?
-- which clusters look genuinely interpretable?
-- do some clusters map onto likely hand-label categories?
-- which clusters should we inspect closely with representative examples?
-- are prime and supplier firms landing in systematically different parts of the cluster space?
+- what themes organize the `pre_2022` corpus?
+- what themes organize the `post_2022` corpus?
+- which post clusters look genuinely new versus persistent?
+- where do broad pre themes split into more specific post subthemes?
+- are the largest post clusters broad sector themes or concentrated company artifacts?
 
 ## Suggested next steps after the first Colab run
 
-1. Save the most interpretable clusters and representative excerpts.
-2. Compare whether primes and suppliers land in different parts of the cluster space.
-3. Decide whether BERTopic is worth keeping as a supporting analysis.
-4. Use what we learn here to refine the manual codebook and later supervised classification.
-5. If the HTML report looks good, use it directly as a shareable exploratory artifact for the group.
+1. Save the most interpretable new and split/refined post clusters.
+2. Read the representative examples for those clusters closely.
+3. Use `cluster_matches.csv` and `pairwise_cluster_similarities.csv` to sanity-check ambiguous mappings.
+4. Pair the thematic-structure findings with filing-level contrastive term or phrase analysis.
+5. Treat the legacy `render_exploratory_report.py` and `render_cluster_diagnostics.py` path as a comparison baseline, not the default workflow.
 
+## Block 8: Render the Gemini-assisted narrative report
 
-## Block 8: Run the CPU-only cluster shift diagnostics
+This second-stage pass assumes your Colab runtime already has access to `GEMINI_API_KEY` and `GEMINI_MODEL`.
 
-This pass does not touch embeddings. It re-ranks the saved clusters by relative movement, filters out company-dominated clusters, and computes within-cluster pre/post contrast terms from the saved sampled rows.
+It does not send one giant prompt. It sends one structured request per interesting post cluster, saves those outputs, then asks Gemini for one abstract on top of the cluster-level analyses.
 
 ```python
-!python analysis/exploratory_clustering/render_cluster_diagnostics.py     --cluster-summary analysis/exploratory_clustering/output/cluster_summary.csv     --sampled-rows analysis/exploratory_clustering/output/sampled_cluster_rows.csv     --representative-examples analysis/exploratory_clustering/output/representative_examples.csv     --output-html analysis/exploratory_clustering/output/cluster_shift_diagnostics.html     --output-csv analysis/exploratory_clustering/output/cluster_shift_diagnostics.csv     --output-contrast-csv analysis/exploratory_clustering/output/cluster_shift_contrasts.csv
+!python analysis/exploratory_clustering/render_period_shift_llm_report.py \
+    --sampled-rows analysis/exploratory_clustering/output/sampled_cluster_rows.csv \
+    --period-cluster-summary analysis/exploratory_clustering/output/period_cluster_summary.csv \
+    --cluster-matches analysis/exploratory_clustering/output/cluster_matches.csv \
+    --representative-examples analysis/exploratory_clustering/output/representative_examples.csv \
+    --metadata analysis/exploratory_clustering/output/period_shift_metadata.json \
+    --output-html analysis/exploratory_clustering/output/period_shift_llm_report.html \
+    --interesting-match-types new_post_only,split/refined,merged \
+    --max-clusters 6 \
+    --central-examples 2 \
+    --peripheral-examples 2 \
+    --matched-pre-examples 2
 ```
 
 This will write:
 
-- `analysis/exploratory_clustering/output/cluster_shift_diagnostics.html`
-- `analysis/exploratory_clustering/output/cluster_shift_diagnostics.csv`
-- `analysis/exploratory_clustering/output/cluster_shift_contrasts.csv`
+- `analysis/exploratory_clustering/output/period_shift_llm_report.html`
+- `analysis/exploratory_clustering/output/llm_cluster_evidence.json`
+- `analysis/exploratory_clustering/output/llm_cluster_analyses.json`
+- `analysis/exploratory_clustering/output/llm_abstract.json`
+- `analysis/exploratory_clustering/output/llm_report_metadata.json`
 
-If you only have `cluster_summary.csv`, you can still run the script without `--sampled-rows`; it will still re-rank and flag concentrated clusters, but it will skip the within-cluster contrast terms.
-
-## Block 9: Download the diagnostics outputs
+## Block 9: Download the LLM report outputs
 
 ```python
 from google.colab import files
-files.download("analysis/exploratory_clustering/output/cluster_shift_diagnostics.html")
-files.download("analysis/exploratory_clustering/output/cluster_shift_diagnostics.csv")
-files.download("analysis/exploratory_clustering/output/cluster_shift_contrasts.csv")
+files.download("analysis/exploratory_clustering/output/period_shift_llm_report.html")
+files.download("analysis/exploratory_clustering/output/llm_cluster_analyses.json")
+files.download("analysis/exploratory_clustering/output/llm_abstract.json")
 ```

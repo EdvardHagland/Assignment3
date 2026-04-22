@@ -126,6 +126,10 @@ The structure is now organized around scraping, one canonical corpus, and one ex
 For analysis preparation, start here:
 
 - `analysis/COLAB_README.md`
+- `analysis/exploratory_clustering/render_period_shift_report.py`
+- `analysis/exploratory_clustering/period_shift_template.html.j2`
+- `analysis/exploratory_clustering/render_period_shift_llm_report.py`
+- `analysis/exploratory_clustering/period_shift_llm_template.html.j2`
 - `analysis/exploratory_clustering/render_exploratory_report.py`
 - `analysis/exploratory_clustering/report_template.html.j2`
 - `analysis/exploratory_clustering/render_cluster_diagnostics.py`
