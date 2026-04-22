@@ -46,6 +46,7 @@ DEFAULT_INTERESTING_MATCH_TYPES = ["new_post_only", "split/refined", "merged"]
 PRE_PERIOD = "pre_2022"
 POST_PERIOD = "post_2022"
 DEFAULT_DATASET_PATH = Path("data/final/sec_defense_risk_dataset.csv")
+EMERGENT_MATCH_TYPE = "new_post_only"
 
 
 def parse_args() -> argparse.Namespace:
@@ -659,6 +660,27 @@ def call_gemini_json(
 
 def build_cluster_prompt(cluster_package: dict[str, Any]) -> str:
     payload = json.dumps(cluster_package, indent=2, ensure_ascii=False)
+    match_type = str(cluster_package.get("match_type", "")).strip()
+    if match_type == EMERGENT_MATCH_TYPE:
+        focus_guidance = textwrap.dedent(
+            """
+            Additional focus for this cluster:
+            - Treat this first as a discovery question, not as a forced comparison question.
+            - Ask whether this looks like a genuinely emergent post-2022 disclosure theme with breadth across firms and filings.
+            - If the cluster seems broad and coherent, say what became newly explicit after 2022.
+            - If the cluster instead looks like firm-specific wording, boilerplate drift, or a weak novelty claim, say that clearly.
+            - Do not force a pre-2022 analogue if the evidence package suggests there is none.
+            """
+        ).strip()
+    else:
+        focus_guidance = textwrap.dedent(
+            """
+            Additional focus for this cluster:
+            - Treat this as a structural change question.
+            - Judge whether the post cluster looks like a refinement, merger, or reframing of earlier pre-2022 themes.
+            - Be explicit about what appears continuous versus what appears newly differentiated.
+            """
+        ).strip()
     return textwrap.dedent(
         f"""
         You are helping with an academic exploratory analysis of U.S. defense-sector SEC 10-K Item 1A risk factor disclosures.
@@ -678,6 +700,9 @@ def build_cluster_prompt(cluster_package: dict[str, Any]) -> str:
         - Use the peripheral examples to test how broad the cluster still is near its outer edge.
         - Use the matched pre examples to judge whether this is genuinely new, more specific, or simply a renamed variant of an earlier theme.
         - Be critical and restrained. If the evidence is weak or mixed, say so.
+        - For broad new_post_only clusters, treat emergence itself as a potential finding.
+
+        {focus_guidance}
 
         Return JSON only, matching the schema exactly.
 
@@ -712,9 +737,11 @@ def build_abstract_prompt(
         - This is disclosure analysis, not direct measurement of realized external risk.
         - The data come from legally cautious corporate filings, so boilerplate and strategic emphasis matter.
         - You should summarize only the strongest major findings supported by the supplied cluster analyses.
+        - Broad post-only clusters can be findings in their own right; if they are well-supported, treat them as discoveries rather than as leftovers from comparison.
         - Do not claim one-to-one cluster identity across periods.
         - Use careful language such as "post-2022 disclosures appear to..." or "the post period shows a more explicit subtheme around..."
         - The abstract should synthesize the major findings across the interesting changed clusters, not repeat every detail.
+        - If the strongest evidence points to genuinely emergent post-2022 themes, lead with those before the split/refined or merged cases.
         - Mention limitations explicitly.
 
         Return JSON only, matching the schema exactly.
@@ -763,7 +790,9 @@ def build_report_context(
         "pre_cluster_count": int((pre_summary["period_cluster"] != -1).sum()),
         "post_cluster_count": int((post_summary["period_cluster"] != -1).sum()),
         "interesting_cluster_count": int(len(interesting_df)),
+        "emergent_cluster_count": int((interesting_df["match_type"] == EMERGENT_MATCH_TYPE).sum()) if not interesting_df.empty else 0,
         "interesting_cluster_rows": interesting_rows,
+        "emergent_cluster_rows": [row for row in interesting_rows if row.get("match_type") == EMERGENT_MATCH_TYPE],
         "top_pre_clusters": compact_rows(pre_summary, ["period_cluster_label", "period_share", "cluster_size", "ticker_count", "filing_count", "top_terms"]),
         "top_post_clusters": compact_rows(post_summary, ["period_cluster_label", "period_share", "cluster_size", "ticker_count", "filing_count", "top_terms"]),
         "match_type_counts": matches_df["match_type"].fillna("missing").value_counts().to_dict() if not matches_df.empty else {},
@@ -907,7 +936,7 @@ def interesting_cluster_figure(interesting_df: pd.DataFrame, template_name: str)
         orientation="h",
         color="match_type",
         template=template_name,
-        title="Interesting post-2022 clusters selected for Gemini review",
+        title="Narrated post-2022 clusters across discovery types",
         labels={"period_share": "Share of sampled post rows", "period_cluster_label": "Post cluster", "match_type": "Match type"},
         hover_data={"best_pre_cluster_label": True, "best_pre_similarity": ":.2f", "top_terms": True},
         color_discrete_map={
@@ -919,6 +948,47 @@ def interesting_cluster_figure(interesting_df: pd.DataFrame, template_name: str)
         },
     )
     fig.update_layout(height=420)
+    return fig
+
+
+def emergent_cluster_figure(interesting_df: pd.DataFrame, template_name: str) -> go.Figure:
+    emergent_df = interesting_df[interesting_df["match_type"] == EMERGENT_MATCH_TYPE].copy()
+    if emergent_df.empty:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="No broad new post-only clusters met the current narration filters.",
+            x=0.5,
+            y=0.5,
+            xref="paper",
+            yref="paper",
+            showarrow=False,
+        )
+        fig.update_layout(template=template_name, height=360, xaxis=dict(visible=False), yaxis=dict(visible=False))
+        return fig
+
+    plot_df = emergent_df.sort_values(["period_share", "cluster_size"], ascending=[False, False])
+    fig = px.bar(
+        plot_df,
+        x="period_share",
+        y="period_cluster_label",
+        orientation="h",
+        color="ticker_count",
+        template=template_name,
+        title="Emergent post-2022 themes with no strong pre analogue",
+        labels={
+            "period_share": "Share of sampled post rows",
+            "period_cluster_label": "Emergent post cluster",
+            "ticker_count": "Ticker count",
+        },
+        hover_data={
+            "cluster_size": True,
+            "filing_count": True,
+            "top_terms": True,
+            "best_pre_similarity": ":.2f",
+        },
+        color_continuous_scale=["#d8ebe7", "#1b998b", "#0f4c5c"],
+    )
+    fig.update_layout(height=max(360, 110 + 44 * len(plot_df)))
     return fig
 
 
@@ -961,11 +1031,13 @@ def build_cluster_cards(
 ) -> list[dict[str, Any]]:
     cards = []
     for package, analysis in zip(cluster_packages, cluster_analyses):
+        match_type = package["match_type"]
         cards.append(
             {
                 "post_cluster_label": package["post_cluster_label"],
-                "match_type": package["match_type"],
+                "match_type": match_type,
                 "match_label": package["match_label"],
+                "is_emergent": match_type == EMERGENT_MATCH_TYPE,
                 "period_share": package["post_period_share"],
                 "cluster_size": package["post_cluster_size"],
                 "ticker_count": package["ticker_count"],
@@ -986,12 +1058,20 @@ def build_cluster_cards(
     return cards
 
 
+def split_cluster_cards(cluster_cards: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    emergent_cards = [card for card in cluster_cards if card["match_type"] == EMERGENT_MATCH_TYPE]
+    comparison_cards = [card for card in cluster_cards if card["match_type"] != EMERGENT_MATCH_TYPE]
+    return emergent_cards, comparison_cards
+
+
 def render_report(
     args: argparse.Namespace,
     summary_metrics: dict[str, str],
     abstract_data: dict[str, Any],
     figures: dict[str, str],
     cluster_cards: list[dict[str, Any]],
+    emergent_cards: list[dict[str, Any]],
+    comparison_cards: list[dict[str, Any]],
 ) -> str:
     template_path = Path(args.template)
     env = Environment(
@@ -1003,12 +1083,14 @@ def render_report(
     template = env.get_template(template_path.name)
     return template.render(
         title=abstract_data.get("report_title", "Gemini-assisted period shift report"),
-        subtitle="Narrative synthesis on top of separate pre/post cluster discovery",
+        subtitle="Narrative synthesis on emergent post-2022 themes and structural shifts after separate pre/post discovery",
         plotly_js=get_plotlyjs(),
         summary=summary_metrics,
         abstract_data=abstract_data,
         figures=figures,
         cluster_cards=cluster_cards,
+        emergent_cards=emergent_cards,
+        comparison_cards=comparison_cards,
         model_name=args.model_name or os.getenv("GEMINI_MODEL", ""),
         generated_from=str(Path(args.sampled_rows).as_posix()),
     )
@@ -1094,6 +1176,7 @@ def main() -> None:
     )
 
     cluster_cards = build_cluster_cards(cluster_packages, cluster_analyses)
+    emergent_cards, comparison_cards = split_cluster_cards(cluster_cards)
 
     template_name = build_plotly_template()
     pre_summary_df = summary_df[summary_df["period_bucket"] == PRE_PERIOD].copy()
@@ -1120,6 +1203,7 @@ def main() -> None:
         "post_cluster_share": period_cluster_share_figure(post_summary_df, POST_PERIOD, 10, template_name),
         "match_heatmap": match_heatmap_figure(pairwise_df, pre_summary_df, post_summary_df, 10, template_name),
         "post_match_status": post_match_status_figure(post_catalog_df, 10, template_name),
+        "emergent_clusters": emergent_cluster_figure(interesting_df, template_name),
         "interesting_clusters": interesting_cluster_figure(interesting_df, template_name),
         "analysis_confidence": confidence_figure(cluster_cards, template_name),
     }
@@ -1127,6 +1211,8 @@ def main() -> None:
 
     summary_metrics = {
         "interesting_clusters": f"{len(cluster_cards):,}",
+        "emergent_discoveries": f"{len(emergent_cards):,}",
+        "structural_shifts": f"{len(comparison_cards):,}",
         "match_types": ", ".join(interesting_match_types),
         "embedding_model": embedding_model_name,
         "llm_model": model_name or "skipped",
@@ -1145,6 +1231,8 @@ def main() -> None:
         abstract_data=abstract_data,
         figures=figures,
         cluster_cards=cluster_cards,
+        emergent_cards=emergent_cards,
+        comparison_cards=comparison_cards,
     )
     output_html.write_text(html, encoding="utf-8")
 
