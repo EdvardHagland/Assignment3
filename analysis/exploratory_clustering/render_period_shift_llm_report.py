@@ -12,9 +12,11 @@ at the top of the report.
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import os
 import textwrap
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -240,6 +242,18 @@ def parse_args() -> argparse.Namespace:
         "--skip-llm",
         action="store_true",
         help="Build the evidence package and HTML shell without calling Gemini.",
+    )
+    parser.add_argument(
+        "--llm-max-concurrency",
+        type=int,
+        default=8,
+        help="Maximum number of cluster-level Gemini requests to run concurrently. The final abstract call remains sequential.",
+    )
+    parser.add_argument(
+        "--llm-request-stagger-seconds",
+        type=float,
+        default=0.2,
+        help="Delay between submitting concurrent cluster-level Gemini requests, to avoid bursting them all at once.",
     )
     parser.add_argument(
         "--allow-reembed",
@@ -1379,6 +1393,8 @@ def run_cluster_analysis(
     model_name: str,
     temperature: float,
     skip_llm: bool,
+    llm_max_concurrency: int,
+    llm_request_stagger_seconds: float,
     progress_path: Path,
     output_path: Path,
     report_context: dict[str, Any],
@@ -1417,44 +1433,37 @@ def run_cluster_analysis(
         )
         write_json(output_path, output_rows)
 
-    analyses = []
-    for package in cluster_packages:
+    def build_skip_analysis(package: dict[str, Any]) -> dict[str, Any]:
+        analysis = {
+            "card_title": package["post_cluster_label"],
+            "headline": "LLM step skipped.",
+            "why_interesting": f"{package['match_label']} cluster selected for narrative review.",
+            "interpretation": "No Gemini interpretation was generated because --skip-llm was used.",
+            "continuity_judgment": "weak_or_unclear_change",
+            "continuity_note": "Continuity judgment unavailable because Gemini was skipped for this run.",
+            "count_gap_role": "unclear",
+            "count_gap_note": "Cluster-count role unavailable because Gemini was skipped for this run.",
+            "layer_reading": "Layer reading unavailable because Gemini was skipped for this run.",
+            "concentration_note": "Concentration reading unavailable because Gemini was skipped for this run.",
+            "temporal_reading_post": "Temporal reading unavailable because Gemini was skipped for this run.",
+            "intra_cluster_churn_note": "Intra-cluster churn reading unavailable because Gemini was skipped for this run.",
+            "category_blending_note": "Category-blending reading unavailable because Gemini was skipped for this run.",
+            "evidence_points": [
+                "Central examples capture the cluster core.",
+                "Peripheral examples test whether the theme remains coherent away from the centroid.",
+            ],
+            "genre_caveat": "Interpretation skipped.",
+            "use_in_abstract": True,
+            "abstract_candidate_sentence": f"{package['post_cluster_label']} was selected for review but not summarized by Gemini.",
+            "confidence": "low",
+            "supporting_example_ids": [example["example_id"] for example in package["central_post_examples"][:1]],
+        }
+        return normalize_cluster_analysis(analysis)
+
+    def analyze_single_package(package: dict[str, Any]) -> tuple[str, dict[str, Any]]:
         cluster_label = str(package["post_cluster_label"])
-        if cluster_label in saved_progress:
-            analyses.append(saved_progress[cluster_label])
-            continue
-
         if skip_llm:
-            analysis = {
-                "card_title": package["post_cluster_label"],
-                "headline": "LLM step skipped.",
-                "why_interesting": f"{package['match_label']} cluster selected for narrative review.",
-                "interpretation": "No Gemini interpretation was generated because --skip-llm was used.",
-                "continuity_judgment": "weak_or_unclear_change",
-                "continuity_note": "Continuity judgment unavailable because Gemini was skipped for this run.",
-                "count_gap_role": "unclear",
-                "count_gap_note": "Cluster-count role unavailable because Gemini was skipped for this run.",
-                "layer_reading": "Layer reading unavailable because Gemini was skipped for this run.",
-                "concentration_note": "Concentration reading unavailable because Gemini was skipped for this run.",
-                "temporal_reading_post": "Temporal reading unavailable because Gemini was skipped for this run.",
-                "intra_cluster_churn_note": "Intra-cluster churn reading unavailable because Gemini was skipped for this run.",
-                "category_blending_note": "Category-blending reading unavailable because Gemini was skipped for this run.",
-                "evidence_points": [
-                    "Central examples capture the cluster core.",
-                    "Peripheral examples test whether the theme remains coherent away from the centroid.",
-                ],
-                "genre_caveat": "Interpretation skipped.",
-                "use_in_abstract": True,
-                "abstract_candidate_sentence": f"{package['post_cluster_label']} was selected for review but not summarized by Gemini.",
-                "confidence": "low",
-                "supporting_example_ids": [example["example_id"] for example in package["central_post_examples"][:1]],
-            }
-            analysis = normalize_cluster_analysis(analysis)
-            saved_progress[cluster_label] = analysis
-            analyses.append(analysis)
-            persist_progress()
-            continue
-
+            return cluster_label, build_skip_analysis(package)
         prompt = build_cluster_prompt(package, report_context=report_context)
         analysis = call_gemini_json(
             api_key=api_key,
@@ -1463,11 +1472,69 @@ def run_cluster_analysis(
             schema=gemini_json_schema_cluster(),
             temperature=temperature,
         )
-        analysis = normalize_cluster_analysis(analysis)
-        saved_progress[cluster_label] = analysis
-        analyses.append(analysis)
-        persist_progress()
-    return analyses
+        return cluster_label, normalize_cluster_analysis(analysis)
+
+    pending_packages = [
+        package for package in cluster_packages if str(package["post_cluster_label"]) not in saved_progress
+    ]
+    if not pending_packages:
+        return [saved_progress[str(package["post_cluster_label"])] for package in cluster_packages]
+
+    if saved_progress:
+        print(
+            f"Reusing cached Gemini analyses for {len(saved_progress)} cluster(s); "
+            f"submitting {len(pending_packages)} new cluster request(s)."
+        )
+
+    max_workers = 1 if skip_llm else max(1, int(llm_max_concurrency))
+    stagger_seconds = max(0.0, float(llm_request_stagger_seconds))
+
+    if max_workers == 1:
+        total_pending = len(pending_packages)
+        print(f"Running {total_pending} cluster-level Gemini request(s) sequentially.")
+        for completed, package in enumerate(pending_packages, start=1):
+            cluster_label, analysis = analyze_single_package(package)
+            saved_progress[cluster_label] = analysis
+            persist_progress()
+            print(f"[{completed}/{total_pending}] Cluster analysis ready: {cluster_label}")
+        return [saved_progress[str(package["post_cluster_label"])] for package in cluster_packages]
+
+    print(
+        f"Running {len(pending_packages)} cluster-level Gemini request(s) with "
+        f"max concurrency {max_workers} and {stagger_seconds:.2f}s submit stagger."
+    )
+    failures: list[tuple[str, str]] = []
+    future_to_label: dict[Any, str] = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        for index, package in enumerate(pending_packages):
+            cluster_label = str(package["post_cluster_label"])
+            future_to_label[executor.submit(analyze_single_package, package)] = cluster_label
+            if stagger_seconds > 0 and index < len(pending_packages) - 1:
+                time.sleep(stagger_seconds)
+
+        completed = 0
+        for future in as_completed(future_to_label):
+            cluster_label = future_to_label[future]
+            try:
+                returned_label, analysis = future.result()
+            except Exception as exc:
+                failures.append((cluster_label, str(exc)))
+                print(f"[error] Cluster analysis failed for {cluster_label}: {exc}")
+                continue
+            saved_progress[returned_label] = analysis
+            persist_progress()
+            completed += 1
+            print(f"[{completed}/{len(pending_packages)}] Cluster analysis ready: {returned_label}")
+
+    if failures:
+        failed_labels = ", ".join(label for label, _ in failures)
+        raise RuntimeError(
+            "Gemini cluster analysis failed for "
+            f"{len(failures)} cluster(s): {failed_labels}. "
+            f"Completed results were checkpointed to {progress_path}."
+        )
+
+    return [saved_progress[str(package["post_cluster_label"])] for package in cluster_packages]
 
 
 def run_abstract_analysis(
@@ -2035,6 +2102,8 @@ def main() -> None:
         model_name=model_name,
         temperature=args.temperature,
         skip_llm=args.skip_llm,
+        llm_max_concurrency=args.llm_max_concurrency,
+        llm_request_stagger_seconds=args.llm_request_stagger_seconds,
         progress_path=cluster_analysis_progress_path,
         output_path=cluster_analysis_path,
         report_context=report_context,
