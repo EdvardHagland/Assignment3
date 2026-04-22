@@ -107,6 +107,7 @@ This will write:
 - `analysis/exploratory_clustering/output/period_shift_report.html`
 - `analysis/exploratory_clustering/output/period_shift_report.pdf`
 - `analysis/exploratory_clustering/output/sampled_cluster_rows.csv`
+- `analysis/exploratory_clustering/output/sampled_embeddings.npz`
 - `analysis/exploratory_clustering/output/period_cluster_summary.csv`
 - `analysis/exploratory_clustering/output/cluster_matches.csv`
 - `analysis/exploratory_clustering/output/pairwise_cluster_similarities.csv`
@@ -154,6 +155,8 @@ It does not send one giant prompt. It sends one structured request per interesti
 
 The final HTML is rendered after those Gemini calls finish, so the abstract and cluster writeups are integrated into the same report HTML together with the clustering figures.
 
+It now reuses the exact sampled embeddings from the same discovery run for evidence selection. A second local embedding pass is only allowed if you explicitly opt into `--allow-reembed` for older artifacts that were created before `sampled_embeddings.npz` was added.
+
 The selection is strict by default:
 
 - only post clusters already flagged as broad themes
@@ -171,6 +174,7 @@ os.environ["GEMINI_MODEL"] = userdata.get("GEMINI_MODEL")
 ```python
 !python analysis/exploratory_clustering/render_period_shift_llm_report.py \
     --sampled-rows analysis/exploratory_clustering/output/sampled_cluster_rows.csv \
+    --sampled-embeddings analysis/exploratory_clustering/output/sampled_embeddings.npz \
     --dataset data/final/sec_defense_risk_dataset.csv \
     --period-cluster-summary analysis/exploratory_clustering/output/period_cluster_summary.csv \
     --pairwise-similarities analysis/exploratory_clustering/output/pairwise_cluster_similarities.csv \
@@ -190,6 +194,7 @@ This will write:
 
 - `analysis/exploratory_clustering/output/period_shift_llm_report.html`
 - `analysis/exploratory_clustering/output/llm_cluster_evidence.json`
+- `analysis/exploratory_clustering/output/llm_cluster_analysis_progress.json`
 - `analysis/exploratory_clustering/output/llm_cluster_analyses.json`
 - `analysis/exploratory_clustering/output/llm_abstract.json`
 - `analysis/exploratory_clustering/output/llm_report_metadata.json`

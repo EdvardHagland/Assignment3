@@ -1177,6 +1177,12 @@ def main() -> None:
     representative_df.to_csv(artifacts_dir / "representative_examples.csv", index=False)
     pairwise_df.to_csv(artifacts_dir / "pairwise_cluster_similarities.csv", index=False)
     match_df.to_csv(artifacts_dir / "cluster_matches.csv", index=False)
+    embeddings_path = artifacts_dir / "sampled_embeddings.npz"
+    np.savez_compressed(
+        embeddings_path,
+        embeddings=embeddings.astype(np.float32),
+        sampled_index=sampled_clustered_df["sampled_index"].to_numpy(dtype=np.int32),
+    )
 
     match_rows = (
         post_catalog_df[
@@ -1202,6 +1208,7 @@ def main() -> None:
         "output_pdf": "",
         "requested_output_pdf": str(output_pdf) if output_pdf else "",
         "artifacts_dir": str(artifacts_dir),
+        "sampled_embeddings": str(embeddings_path),
         "model_name": args.model_name,
         "sample_per_period": args.sample_per_period,
         "cluster_min_size": args.cluster_min_size,

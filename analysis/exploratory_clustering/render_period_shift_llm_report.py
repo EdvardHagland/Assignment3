@@ -88,6 +88,11 @@ def parse_args() -> argparse.Namespace:
         help="Path to period_shift_metadata.json from render_period_shift_report.py.",
     )
     parser.add_argument(
+        "--sampled-embeddings",
+        default="",
+        help="Optional path to sampled_embeddings.npz from render_period_shift_report.py. Defaults to the same-run path in metadata or the standard output location.",
+    )
+    parser.add_argument(
         "--output-html",
         default="analysis/exploratory_clustering/output/period_shift_llm_report.html",
         help="Path to the rendered HTML report.",
@@ -110,7 +115,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--embedding-model-name",
         default="",
-        help="Sentence-transformers model to use when recomputing within-cluster distances. Defaults to metadata model_name.",
+        help="Sentence-transformers model used only if --allow-reembed is explicitly enabled for legacy artifacts.",
     )
     parser.add_argument(
         "--interesting-match-types",
@@ -164,6 +169,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Build the evidence package and HTML shell without calling Gemini.",
     )
+    parser.add_argument(
+        "--allow-reembed",
+        action="store_true",
+        help="Allow a second local embedding pass only when same-run sampled_embeddings.npz is unavailable. Intended as a legacy fallback.",
+    )
     return parser.parse_args()
 
 
@@ -194,6 +204,11 @@ def build_plotly_template() -> str:
 
 def read_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def write_json(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def load_inputs(args: argparse.Namespace) -> dict[str, Any]:
@@ -247,6 +262,18 @@ def resolve_dataset_path(args: argparse.Namespace, metadata: dict[str, Any]) -> 
     raise ValueError("No dataset path available. Pass --dataset or provide period_shift_metadata.json with a dataset entry.")
 
 
+def resolve_sampled_embeddings_path(args: argparse.Namespace, metadata: dict[str, Any]) -> Path | None:
+    if args.sampled_embeddings.strip():
+        return Path(args.sampled_embeddings)
+    metadata_value = str(metadata.get("sampled_embeddings", "")).strip()
+    if metadata_value:
+        return Path(metadata_value)
+    default_path = Path("analysis/exploratory_clustering/output/sampled_embeddings.npz")
+    if default_path.exists():
+        return default_path
+    return None
+
+
 def parse_match_types(value: str) -> list[str]:
     return [part.strip() for part in value.split(",") if part.strip()]
 
@@ -294,6 +321,13 @@ def embed_texts(texts: list[str], model_name: str) -> np.ndarray:
     return np.asarray(embeddings)
 
 
+def load_saved_embeddings(path: Path) -> tuple[np.ndarray, np.ndarray]:
+    payload = np.load(path)
+    embeddings = np.asarray(payload["embeddings"])
+    sampled_index = np.asarray(payload["sampled_index"])
+    return embeddings, sampled_index
+
+
 def normalize_vector(vector: np.ndarray) -> np.ndarray:
     norm = float(np.linalg.norm(vector))
     if norm == 0:
@@ -305,12 +339,34 @@ def compute_cluster_distance_frame(
     sampled_df: pd.DataFrame,
     cluster_labels: list[str],
     embedding_model_name: str,
+    embedding_payload: tuple[np.ndarray, np.ndarray] | None,
+    allow_reembed: bool,
 ) -> pd.DataFrame:
     focus_df = sampled_df[sampled_df["period_cluster_label"].isin(cluster_labels)].copy()
     if focus_df.empty:
         return focus_df
+    focus_df = focus_df.sort_values("sampled_index").reset_index(drop=True)
 
-    embeddings = embed_texts(focus_df["text"].astype(str).tolist(), embedding_model_name)
+    if embedding_payload is not None:
+        saved_embeddings, saved_sampled_index = embedding_payload
+        embedding_lookup = {int(idx): pos for pos, idx in enumerate(saved_sampled_index.tolist())}
+        missing_indices = [int(idx) for idx in focus_df["sampled_index"].tolist() if int(idx) not in embedding_lookup]
+        if missing_indices:
+            raise ValueError(
+                "Saved sampled embeddings are missing rows needed for evidence selection: "
+                f"{missing_indices[:5]}"
+            )
+        embedding_positions = focus_df["sampled_index"].astype(int).map(embedding_lookup).to_numpy()
+        embeddings = saved_embeddings[embedding_positions]
+    else:
+        if not allow_reembed:
+            raise ValueError(
+                "No same-run sampled embeddings were available for evidence selection. "
+                "Rerun render_period_shift_report.py with the latest code or pass --allow-reembed "
+                "to use a legacy second embedding pass."
+            )
+        embeddings = embed_texts(focus_df["text"].astype(str).tolist(), embedding_model_name)
+
     focus_df["embedding_index"] = np.arange(len(focus_df))
     focus_df["distance_to_centroid"] = np.nan
     focus_df["distance_rank"] = np.nan
@@ -450,12 +506,20 @@ def build_all_evidence_packages(
     sampled_df: pd.DataFrame,
     representative_df: pd.DataFrame,
     embedding_model_name: str,
+    embedding_payload: tuple[np.ndarray, np.ndarray] | None,
+    allow_reembed: bool,
     args: argparse.Namespace,
 ) -> list[dict[str, Any]]:
     cluster_labels = interesting_df["period_cluster_label"].astype(str).tolist()
     pre_labels = [str(value) for value in interesting_df["best_pre_cluster_label"].dropna().tolist() if str(value).strip()]
     unique_labels = sorted(set(cluster_labels + pre_labels))
-    cluster_distance_df = compute_cluster_distance_frame(sampled_df, unique_labels, embedding_model_name)
+    cluster_distance_df = compute_cluster_distance_frame(
+        sampled_df,
+        unique_labels,
+        embedding_model_name,
+        embedding_payload=embedding_payload,
+        allow_reembed=allow_reembed,
+    )
 
     packages = []
     for _, row in interesting_df.iterrows():
@@ -712,27 +776,57 @@ def run_cluster_analysis(
     model_name: str,
     temperature: float,
     skip_llm: bool,
+    progress_path: Path,
+    output_path: Path,
 ) -> list[dict[str, Any]]:
+    saved_progress: dict[str, dict[str, Any]] = {}
+    if progress_path.exists():
+        try:
+            rows = read_json(progress_path)
+            if isinstance(rows, list):
+                for row in rows:
+                    if isinstance(row, dict) and "post_cluster_label" in row and "analysis" in row:
+                        saved_progress[str(row["post_cluster_label"])] = row["analysis"]
+        except Exception:
+            saved_progress = {}
+
+    def persist_progress() -> None:
+        progress_rows = []
+        output_rows = []
+        for package in cluster_packages:
+            label = str(package["post_cluster_label"])
+            if label in saved_progress:
+                progress_rows.append({"post_cluster_label": label, "analysis": saved_progress[label]})
+                output_rows.append(saved_progress[label])
+        write_json(progress_path, progress_rows)
+        write_json(output_path, output_rows)
+
     analyses = []
     for package in cluster_packages:
+        cluster_label = str(package["post_cluster_label"])
+        if cluster_label in saved_progress:
+            analyses.append(saved_progress[cluster_label])
+            continue
+
         if skip_llm:
-            analyses.append(
-                {
-                    "card_title": package["post_cluster_label"],
-                    "headline": "LLM step skipped.",
-                    "why_interesting": f"{package['match_label']} cluster selected for narrative review.",
-                    "interpretation": "No Gemini interpretation was generated because --skip-llm was used.",
-                    "evidence_points": [
-                        "Central examples capture the cluster core.",
-                        "Peripheral examples test whether the theme remains coherent away from the centroid.",
-                    ],
-                    "genre_caveat": "Interpretation skipped.",
-                    "use_in_abstract": True,
-                    "abstract_candidate_sentence": f"{package['post_cluster_label']} was selected for review but not summarized by Gemini.",
-                    "confidence": "low",
-                    "supporting_example_ids": [example["example_id"] for example in package["central_post_examples"][:1]],
-                }
-            )
+            analysis = {
+                "card_title": package["post_cluster_label"],
+                "headline": "LLM step skipped.",
+                "why_interesting": f"{package['match_label']} cluster selected for narrative review.",
+                "interpretation": "No Gemini interpretation was generated because --skip-llm was used.",
+                "evidence_points": [
+                    "Central examples capture the cluster core.",
+                    "Peripheral examples test whether the theme remains coherent away from the centroid.",
+                ],
+                "genre_caveat": "Interpretation skipped.",
+                "use_in_abstract": True,
+                "abstract_candidate_sentence": f"{package['post_cluster_label']} was selected for review but not summarized by Gemini.",
+                "confidence": "low",
+                "supporting_example_ids": [example["example_id"] for example in package["central_post_examples"][:1]],
+            }
+            saved_progress[cluster_label] = analysis
+            analyses.append(analysis)
+            persist_progress()
             continue
 
         prompt = build_cluster_prompt(package)
@@ -743,7 +837,9 @@ def run_cluster_analysis(
             schema=gemini_json_schema_cluster(),
             temperature=temperature,
         )
+        saved_progress[cluster_label] = analysis
         analyses.append(analysis)
+        persist_progress()
     return analyses
 
 
@@ -756,9 +852,18 @@ def run_abstract_analysis(
     model_name: str,
     temperature: float,
     skip_llm: bool,
+    output_path: Path,
 ) -> dict[str, Any]:
+    if output_path.exists():
+        try:
+            payload = read_json(output_path)
+            if isinstance(payload, dict) and payload:
+                return payload
+        except Exception:
+            pass
+
     if skip_llm:
-        return {
+        abstract = {
             "report_title": "LLM abstract skipped",
             "abstract": "The evidence package was built successfully, but Gemini was not called because --skip-llm was used.",
             "major_findings": [
@@ -772,15 +877,19 @@ def run_abstract_analysis(
             ],
             "closing_caution": "Run without --skip-llm to generate the actual narrative synthesis.",
         }
+        write_json(output_path, abstract)
+        return abstract
 
     prompt = build_abstract_prompt(cluster_packages, cluster_analyses, metadata, report_context)
-    return call_gemini_json(
+    abstract = call_gemini_json(
         api_key=api_key,
         model_name=model_name,
         prompt=prompt,
         schema=gemini_json_schema_abstract(),
         temperature=temperature,
     )
+    write_json(output_path, abstract)
+    return abstract
 
 
 def interesting_cluster_figure(interesting_df: pd.DataFrame, template_name: str) -> go.Figure:
@@ -920,6 +1029,8 @@ def main() -> None:
     representative_df = inputs["representative_df"]
     metadata = inputs["metadata"]
     dataset_path = resolve_dataset_path(args, metadata)
+    sampled_embeddings_path = resolve_sampled_embeddings_path(args, metadata)
+    embedding_payload = load_saved_embeddings(sampled_embeddings_path) if sampled_embeddings_path and sampled_embeddings_path.exists() else None
     full_df = pd.read_csv(dataset_path)
     full_df = full_df[full_df["comparison_window"].isin(["pre_2018_2021", "post_2022_2025"])].copy()
     full_df["text"] = full_df["text"].fillna("").astype(str).str.strip()
@@ -939,8 +1050,15 @@ def main() -> None:
         sampled_df=sampled_df,
         representative_df=representative_df,
         embedding_model_name=embedding_model_name,
+        embedding_payload=embedding_payload,
+        allow_reembed=args.allow_reembed,
         args=args,
     )
+    cluster_evidence_path = artifacts_dir / "llm_cluster_evidence.json"
+    cluster_analysis_progress_path = artifacts_dir / "llm_cluster_analysis_progress.json"
+    cluster_analysis_path = artifacts_dir / "llm_cluster_analyses.json"
+    abstract_path = artifacts_dir / "llm_abstract.json"
+    write_json(cluster_evidence_path, cluster_packages)
 
     api_key = ""
     model_name = ""
@@ -954,6 +1072,8 @@ def main() -> None:
         model_name=model_name,
         temperature=args.temperature,
         skip_llm=args.skip_llm,
+        progress_path=cluster_analysis_progress_path,
+        output_path=cluster_analysis_path,
     )
     report_context = build_report_context(
         full_df=full_df,
@@ -970,6 +1090,7 @@ def main() -> None:
         model_name=model_name,
         temperature=args.abstract_temperature,
         skip_llm=args.skip_llm,
+        output_path=abstract_path,
     )
 
     cluster_cards = build_cluster_cards(cluster_packages, cluster_analyses)
@@ -1015,9 +1136,8 @@ def main() -> None:
         "post_clusters": f"{int((post_summary_df['period_cluster'] != -1).sum())}",
     }
 
-    (artifacts_dir / "llm_cluster_evidence.json").write_text(json.dumps(cluster_packages, indent=2, ensure_ascii=False), encoding="utf-8")
-    (artifacts_dir / "llm_cluster_analyses.json").write_text(json.dumps(cluster_analyses, indent=2, ensure_ascii=False), encoding="utf-8")
-    (artifacts_dir / "llm_abstract.json").write_text(json.dumps(abstract_data, indent=2, ensure_ascii=False), encoding="utf-8")
+    write_json(cluster_analysis_path, cluster_analyses)
+    write_json(abstract_path, abstract_data)
 
     html = render_report(
         args=args,
@@ -1036,13 +1156,15 @@ def main() -> None:
         "pairwise_similarities": args.pairwise_similarities,
         "cluster_matches": args.cluster_matches,
         "representative_examples": args.representative_examples,
+        "sampled_embeddings": str(sampled_embeddings_path) if sampled_embeddings_path else "",
         "embedding_model_name": embedding_model_name,
         "llm_model_name": model_name or "",
         "interesting_match_types": interesting_match_types,
         "skip_llm": bool(args.skip_llm),
+        "allow_reembed": bool(args.allow_reembed),
         "narrated_clusters": len(cluster_cards),
     }
-    (artifacts_dir / "llm_report_metadata.json").write_text(json.dumps(metadata_out, indent=2, ensure_ascii=False), encoding="utf-8")
+    write_json(artifacts_dir / "llm_report_metadata.json", metadata_out)
 
     print(f"Rendered HTML report to: {output_html}")
     print(f"Artifacts written to: {artifacts_dir}")
