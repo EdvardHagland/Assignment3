@@ -18,11 +18,17 @@ The dataset-generation block is included too, but it is optional. In most cases 
 - a `T4 GPU` is already enough for a serious exploratory pass
 - if you land on an `H100`, just keep the same workflow and increase the sample size if you want
 
-## Block 1: Clone the repository
+## Block 1: Clone or refresh the repository
+
+This version is safe to rerun in the same Colab session. If `/content/Assignment3`
+already exists, it refreshes the checkout instead of failing on a second clone.
 
 ```python
-!git clone https://github.com/EdvardHagland/Assignment3.git
+!if [ ! -d /content/Assignment3/.git ]; then git clone https://github.com/EdvardHagland/Assignment3.git /content/Assignment3; fi
 %cd /content/Assignment3
+!git fetch origin
+!git checkout main
+!git pull --ff-only origin main
 ```
 
 ## Block 2: Install dependencies
