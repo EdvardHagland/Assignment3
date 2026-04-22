@@ -6,6 +6,8 @@ Current starter files:
 
 - [COLAB_README.md](/C:/Users/edvar/Assignment3/analysis/COLAB_README.md)
   - copy-paste Google Colab blocks for loading the corpus, optionally regenerating it, and rendering the maintained period-shift clustering report
+- [requirements-colab.txt](/C:/Users/edvar/Assignment3/analysis/requirements-colab.txt)
+  - dependency list for the maintained Colab analysis and report workflow
 - [exploratory_clustering/README.md](/C:/Users/edvar/Assignment3/analysis/exploratory_clustering/README.md)
   - the exploratory clustering workflow for separate pre/post discovery and approximate cluster matching
 

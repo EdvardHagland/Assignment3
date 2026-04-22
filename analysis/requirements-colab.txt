@@ -1,0 +1,10 @@
+pandas
+numpy
+scikit-learn
+plotly
+jinja2
+kaleido
+reportlab
+sentence-transformers
+umap-learn
+hdbscan

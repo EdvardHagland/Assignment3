@@ -28,7 +28,7 @@ The dataset-generation block is included too, but it is optional. In most cases 
 ## Block 2: Install dependencies
 
 ```python
-!pip -q install pandas numpy scikit-learn matplotlib seaborn plotly jinja2 kaleido reportlab sentence-transformers umap-learn hdbscan bertopic
+!pip -q install -r analysis/requirements-colab.txt
 ```
 
 ## Block 3: Optional dataset generation
@@ -137,7 +137,7 @@ The first exploratory pass is not meant to produce the final argument. It is mea
 
 ## Block 8: Render the final integrated Gemini-assisted report
 
-This second-stage pass assumes your Colab runtime already has access to `GEMINI_API_KEY` and `GEMINI_MODEL`.
+This second-stage pass assumes your Colab runtime already has Colab Secrets named `GEMINI_API_KEY` and `GEMINI_MODEL`, and that you have granted notebook access to them.
 
 It does not send one giant prompt. It sends one structured request per interesting post cluster, saves those outputs, then asks Gemini for one abstract on top of the cluster-level analyses.
 
@@ -150,9 +150,18 @@ The selection is strict by default:
 - no fallback to weaker clusters if nothing passes the filter
 
 ```python
+import os
+from google.colab import userdata
+
+os.environ["GEMINI_API_KEY"] = userdata.get("GEMINI_API_KEY")
+os.environ["GEMINI_MODEL"] = userdata.get("GEMINI_MODEL")
+```
+
+```python
 !python analysis/exploratory_clustering/render_period_shift_llm_report.py \
     --sampled-rows analysis/exploratory_clustering/output/sampled_cluster_rows.csv \
     --period-cluster-summary analysis/exploratory_clustering/output/period_cluster_summary.csv \
+    --pairwise-similarities analysis/exploratory_clustering/output/pairwise_cluster_similarities.csv \
     --cluster-matches analysis/exploratory_clustering/output/cluster_matches.csv \
     --representative-examples analysis/exploratory_clustering/output/representative_examples.csv \
     --metadata analysis/exploratory_clustering/output/period_shift_metadata.json \
