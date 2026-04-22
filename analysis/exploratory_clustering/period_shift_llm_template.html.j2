@@ -487,14 +487,10 @@
   <div class="accent-bar"></div>
   <nav class="nav">
     <a href="#overview">Overview</a>
-    <a href="#count-shift">Count Shift</a>
-    <a href="#abstract">Abstract</a>
-    <a href="#corpus">Corpus</a>
-    <a href="#discovery">Discovery</a>
-    <a href="#emergence">Emergence</a>
-    <a href="#matching">Matching</a>
-    <a href="#selection">Selection</a>
-    <a href="#clusters">Cluster Cards</a>
+    <a href="#question">Question & Method</a>
+    <a href="#answer">Answer</a>
+    <a href="#clusters">Findings</a>
+    <a href="#corpus">Method Appendix</a>
     <a href="#catalog">Catalog</a>
   </nav>
 
@@ -519,11 +515,33 @@
       </div>
     </section>
 
-    <section class="section" id="count-shift">
+    <section class="section" id="question">
       <div class="section-header">
-        <h2>Cluster Count Shift</h2>
+        <h2>Research Question and Method</h2>
+        <p>This report is designed to answer a narrow question about disclosure change, using a method that separates thematic structure from simple row-count growth.</p>
+      </div>
+      <div class="abstract-lists">
+        <div class="abstract-box">
+          <h3>Research Question</h3>
+          <p>How did the thematic structure of defense-sector SEC 10-K Item 1A risk disclosures change after 2022, and do extra post-2022 clusters reflect genuinely new risk themes, the splitting of older broad themes, or simply denser and more explicit disclosure language?</p>
+        </div>
+        <div class="abstract-box">
+          <h3>Method</h3>
+          <p>All rows were embedded once with the same model, then clustered separately for the pre-2022 and post-2022 subsets. Post clusters were approximately matched back to pre clusters, and Gemini was used only after that evidence layer existed, one cluster at a time, to interpret whether each selected cluster looks new, refined, shifted in contents, or largely continuous.</p>
+        </div>
+      </div>
+      <div class="abstract-box" style="margin-top: 14px;">
+        <h3>How To Read The Result</h3>
+        <p>A higher post-2022 cluster count is not treated as self-explanatory. The report explicitly asks whether the gap comes from genuinely new themes, from older themes splitting into more specific subthemes, or from the same themes being described in longer and more explicit post-2022 language.</p>
+      </div>
+    </section>
+
+    <section class="section" id="answer">
+      <div class="section-header">
+        <h2>Answer in Brief</h2>
         <p>{{ count_shift.headline_note }}</p>
       </div>
+      <p class="cluster-text"><strong>Main answer</strong> {{ abstract_data.primary_result }}</p>
       <div class="grid-2">
         <div class="figure-card">{{ figures.cluster_count_shift | safe }}</div>
         <div class="figure-card">{{ figures.period_text_density | safe }}</div>
@@ -533,9 +551,8 @@
       <p class="cluster-text"><strong>Volume caution</strong> {{ count_shift.volume_note }}</p>
     </section>
 
-    <section class="abstract-card" id="abstract">
-      <h2>Executive Abstract</h2>
-      <p><strong>Primary result:</strong> {{ abstract_data.primary_result }}</p>
+    <section class="abstract-card">
+      <h2>Interpretive Summary</h2>
       <p>{{ abstract_data.abstract }}</p>
       <div class="abstract-lists">
         <div class="abstract-box">
@@ -560,8 +577,8 @@
 
     <section class="section" id="corpus">
       <div class="section-header">
-        <h2>Corpus and sample structure</h2>
-        <p>This final report keeps the full exploratory context visible. The Gemini layer is added after the clustering evidence has already been prepared, not instead of it.</p>
+        <h2>Method Appendix: Corpus and Sample Structure</h2>
+        <p>This appendix keeps the evidence trail visible. The Gemini layer sits on top of these artifacts; it does not replace the separate-clustering workflow.</p>
       </div>
       <div class="grid-2">
         <div class="figure-card">{{ figures.corpus_overview | safe }}</div>
@@ -571,8 +588,8 @@
 
     <section class="section" id="discovery">
       <div class="section-header">
-        <h2>Separate cluster discovery</h2>
-        <p>The report still shows the same shared embedding space and separate pre/post cluster systems. Gemini is only used after this evidence layer exists.</p>
+        <h2>Method Appendix: Separate Cluster Discovery</h2>
+        <p>The same embedding space is used for both periods, but cluster discovery is run separately so the method can detect thematic splitting, refinement, or newly explicit subthemes rather than forcing one global cluster map.</p>
       </div>
       <div class="grid-2">
         <div class="figure-card" style="grid-column: 1 / -1;">{{ figures.shared_umap_period | safe }}</div>
@@ -585,8 +602,8 @@
 
     <section class="section" id="emergence">
       <div class="section-header">
-        <h2>Emergent post-2022 themes</h2>
-        <p>Broad <code>new_post_only</code> clusters are treated here as discoveries in their own right. But the final emergence call is not based on geometry alone: a cluster can also land here if Gemini judges the post-2022 contents to be genuinely new even when the centroid still sits close to a pre cluster. This screen is intentionally a bit looser than the structural-comparison filter, because emergent themes can be newer and somewhat narrower while still spanning multiple firms and filings.</p>
+        <h2>Method Appendix: Change Categories</h2>
+        <p>Emergence is not defined only as centroid mismatch. A post cluster can count as a substantive discovery only if the evidence suggests genuine novelty, while many of the most interesting results in this run instead look like split/refined themes or stable families with shifted contents.</p>
       </div>
       <div class="grid-2">
         <div class="figure-card">{{ figures.emergent_clusters | safe }}</div>
@@ -596,8 +613,8 @@
 
     <section class="section" id="matching">
       <div class="section-header">
-        <h2>Approximate pre/post matching</h2>
-        <p>This is still useful for the second question: which post clusters look persistent, split/refined, or merged relative to the pre system. But emergence is not reduced to matching failure.</p>
+        <h2>Method Appendix: Approximate Pre/Post Matching</h2>
+        <p>Approximate matching is used to ask which post clusters look persistent, split/refined, or merged relative to the pre system. It is useful for interpretation, but it is not treated as proof of one-to-one cluster identity.</p>
       </div>
       <div class="grid-2">
         <div class="figure-card" style="grid-column: 1 / -1;">{{ figures.match_heatmap | safe }}</div>
@@ -607,8 +624,8 @@
 
     <section class="section" id="selection">
       <div class="section-header">
-        <h2>Which clusters were narrated</h2>
-        <p>Only post-2022 clusters that already looked analytically interesting from the period-shift artifacts were passed to Gemini. Broad new post-only themes were prioritized as discovery candidates, alongside split/refined and merged cases, and a small audit set of broad persistent clusters was included to catch same-family content drift that the embedding geometry might otherwise hide.</p>
+        <h2>Method Appendix: Which Clusters Were Narrated</h2>
+        <p>Only post-2022 clusters that already looked analytically interesting from the period-shift artifacts were passed to Gemini. Broad changed themes were prioritized, and a small audit set of broad persistent clusters was added as controls so the report could distinguish thematic change from stable legal boilerplate.</p>
       </div>
       <div class="grid-2">
         <div class="figure-card">{{ figures.interesting_clusters | safe }}</div>
@@ -618,16 +635,19 @@
 
     <section class="section" id="clusters">
       <div class="section-header">
-        <h2>Evidence-aware cluster cards</h2>
-        <p>Each card combines structured cluster metadata, Gemini’s critical interpretation, centroid-near evidence, mid-distance evidence, outer-edge evidence, and matched pre-2022 comparison text where available. Emergent themes are shown first.</p>
+        <h2>Main Findings</h2>
+        <p>The cards below are organized around the research question rather than around raw match labels. Changed themes come first because they carry the substantive answer; stable baselines come second because they show where disclosure language stayed mostly within older legal frames.</p>
       </div>
+      {% if not emergent_cards %}
+      <div class="empty-note" style="margin-bottom: 18px;">No narrated cluster was judged wholly new in this run. The central result is therefore not the appearance of detached post-only themes, but the splitting, sharpening, and content-shifting of older disclosure families.</div>
+      {% endif %}
       <div class="subsection-head">
-        <h3>Emergent post-2022 discoveries</h3>
-        <p>These are the post clusters with no strong pre analogue that still clear the emergence breadth screen. They are treated as substantive discoveries unless the evidence suggests boilerplate drift or firm-specific artifacts.</p>
+        <h3>What Changed Most After 2022</h3>
+        <p>These are the clusters where the evidence suggests substantive change: either a clearer structural shift, a split/refined subtheme, or a stable thematic family whose post-2022 contents became noticeably more explicit.</p>
       </div>
-      {% if emergent_cards %}
+      {% if finding_cards %}
       <div class="clusters">
-        {% for cluster in emergent_cards %}
+        {% for cluster in finding_cards %}
         <article class="cluster-card" data-kind="{{ cluster.match_type }}">
           <div class="cluster-head">
             <h3>{{ cluster.post_cluster_label }}</h3>
@@ -712,16 +732,16 @@
         {% endfor %}
       </div>
       {% else %}
-      <div class="empty-note">No narrated clusters were ultimately classified as emergent, either by geometric novelty or by Gemini's content-based judgment.</div>
+      <div class="empty-note">No narrated clusters were judged to carry a meaningful post-2022 change signal in the current synthesis.</div>
       {% endif %}
 
       <div class="subsection-head" style="margin-top:22px;">
-        <h3>Same families, shifted contents</h3>
-        <p>These clusters still look near an earlier thematic family in embedding space, but the post-2022 examples shift enough in emphasis or internal mix that Gemini judges the contents to have moved.</p>
+        <h3>Stable Baselines and Controls</h3>
+        <p>These clusters matter because they show what did not change very much. They function as controls against over-reading the post-2022 count gap as pure novelty.</p>
       </div>
-      {% if shifted_content_cards %}
+      {% if baseline_cards %}
       <div class="clusters">
-        {% for cluster in shifted_content_cards %}
+        {% for cluster in baseline_cards %}
         <article class="cluster-card" data-kind="{{ cluster.match_type }}">
           <div class="cluster-head">
             <h3>{{ cluster.post_cluster_label }}</h3>
@@ -806,102 +826,17 @@
         {% endfor %}
       </div>
       {% else %}
-      <div class="empty-note">No narrated clusters were judged as stable families with shifted contents in the final synthesis.</div>
+      <div class="empty-note">No narrated clusters were judged to function mainly as stable baselines in this run.</div>
       {% endif %}
 
       <div class="subsection-head" style="margin-top:22px;">
-        <h3>Structural comparisons and transformations</h3>
-        <p>These clusters are narrated as refinements, mergers, or other structural shifts relative to the pre-2022 thematic system.</p>
+        <h3>How The Narrated Set Breaks Down</h3>
+        <p>These summary visuals show how the final narrated set separates into genuinely emergent themes, same-family content shifts, and broader structural changes.</p>
       </div>
-      {% if comparison_cards %}
-      <div class="clusters">
-        {% for cluster in comparison_cards %}
-        <article class="cluster-card" data-kind="{{ cluster.match_type }}">
-          <div class="cluster-head">
-            <h3>{{ cluster.post_cluster_label }}</h3>
-            <div class="cluster-meta">{{ cluster.cluster_size }} rows<br>{{ cluster.ticker_count }} tickers<br>{{ cluster.filing_count }} filings</div>
-          </div>
-          <span class="badge">{{ cluster.match_label }}</span>
-
-          <div class="analysis-box">
-            <h4>{{ cluster.analysis.card_title }}</h4>
-            <p><strong>{{ cluster.analysis.headline }}</strong> {{ cluster.analysis.interpretation }}</p>
-          </div>
-
-          <div class="stats">
-            <div class="stat-box"><strong>Post share</strong><span>{{ "%.1f"|format(cluster.period_share * 100) }}%</span></div>
-            <div class="stat-box"><strong>Best cosine</strong><span>{% if cluster.best_pre_similarity == cluster.best_pre_similarity %}{{ "%.2f"|format(cluster.best_pre_similarity) }}{% else %}n/a{% endif %}</span></div>
-            <div class="stat-box"><strong>Match</strong><span>{{ cluster.best_pre_cluster_label or "none" }}</span></div>
-            <div class="stat-box"><strong>Confidence</strong><span>{{ cluster.analysis.confidence }}</span></div>
-          </div>
-
-          <div class="cluster-text"><strong>Why it was selected</strong> {{ cluster.analysis.why_interesting }}</div>
-          <div class="cluster-text"><strong>Change reading</strong> {{ cluster.continuity_label }}. {{ cluster.analysis.continuity_note }}</div>
-          <div class="cluster-text"><strong>Count-gap role</strong> {{ cluster.count_gap_role_label }}. {{ cluster.analysis.count_gap_note }}</div>
-          <div class="cluster-text"><strong>Post terms</strong> {{ cluster.top_terms }}</div>
-          {% if cluster.best_pre_top_terms %}
-          <div class="cluster-text"><strong>Best pre terms</strong> {{ cluster.best_pre_top_terms }}</div>
-          {% endif %}
-          {% if cluster.shared_terms %}
-          <div class="cluster-text"><strong>Shared terms</strong> {{ cluster.shared_terms }}</div>
-          {% endif %}
-          <div class="cluster-text"><strong>Genre caveat</strong> {{ cluster.analysis.genre_caveat }}</div>
-
-          <ul class="bullet-list">
-            {% for point in cluster.analysis.evidence_points %}
-            <li>{{ point }}</li>
-            {% endfor %}
-          </ul>
-
-          <div class="evidence-grid">
-            <details class="evidence-group">
-              <summary>Core post examples ({{ cluster.central_post_examples | length }})</summary>
-              {% for example in cluster.central_post_examples %}
-              <div class="example">
-                <div class="example-meta">{{ example.example_id }} · {{ example.ticker }} · {{ example.company_layer }} · {{ example.filing_year }}</div>
-                <p>{{ example.text_preview }}</p>
-              </div>
-              {% endfor %}
-            </details>
-
-            <details class="evidence-group">
-              <summary>Mid-distance post examples ({{ cluster.mid_post_examples | length }})</summary>
-              {% for example in cluster.mid_post_examples %}
-              <div class="example">
-                <div class="example-meta">{{ example.example_id }} · {{ example.ticker }} · {{ example.company_layer }} · {{ example.filing_year }} · p={{ "%.2f"|format(example.distance_percentile) }}</div>
-                <p>{{ example.text_preview }}</p>
-              </div>
-              {% endfor %}
-            </details>
-
-            <details class="evidence-group">
-              <summary>Peripheral but still member examples ({{ cluster.peripheral_post_examples | length }})</summary>
-              {% for example in cluster.peripheral_post_examples %}
-              <div class="example">
-                <div class="example-meta">{{ example.example_id }} · {{ example.ticker }} · {{ example.company_layer }} · {{ example.filing_year }} · p={{ "%.2f"|format(example.distance_percentile) }}</div>
-                <p>{{ example.text_preview }}</p>
-              </div>
-              {% endfor %}
-            </details>
-
-            {% if cluster.matched_pre_examples %}
-            <details class="evidence-group">
-              <summary>Matched pre-cluster context ({{ cluster.matched_pre_examples | length }})</summary>
-              {% for example in cluster.matched_pre_examples %}
-              <div class="example">
-                <div class="example-meta">{{ example.example_id }} · {{ example.ticker }} · {{ example.company_layer }} · {{ example.filing_year }}</div>
-                <p>{{ example.text_preview }}</p>
-              </div>
-              {% endfor %}
-            </details>
-            {% endif %}
-          </div>
-        </article>
-        {% endfor %}
+      <div class="grid-2">
+        <div class="figure-card">{{ figures.emergent_clusters | safe }}</div>
+        <div class="figure-card">{{ figures.content_shift_clusters | safe }}</div>
       </div>
-      {% else %}
-      <div class="empty-note">No narrated clusters fell into the structural comparison group under the current filters.</div>
-      {% endif %}
     </section>
 
     <section class="section" id="catalog">
@@ -912,7 +847,7 @@
       <details>
         <summary>{{ cluster_cards | length }} narrated clusters</summary>
         <div class="clusters" style="margin-top: 16px;">
-          {% for cluster in cluster_cards %}
+          {% for cluster in finding_cards + baseline_cards %}
           <article class="cluster-card" data-kind="{{ cluster.match_type }}">
             <div class="cluster-head">
               <h3>{{ cluster.post_cluster_label }}</h3>

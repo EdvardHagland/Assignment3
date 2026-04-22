@@ -74,6 +74,20 @@ COUNT_GAP_ROLE_LABELS = {
     "little_or_no_count_gap_role": "Little or no count-gap role",
     "unclear": "Unclear",
 }
+CONTINUITY_READING_PRIORITY = {
+    "genuinely_new_theme": 0,
+    "clear_structural_change": 1,
+    "same_cluster_shifted_contents": 2,
+    "weak_or_unclear_change": 3,
+    "largely_continuous": 4,
+}
+COUNT_GAP_ROLE_PRIORITY = {
+    "genuine_novelty": 0,
+    "split_or_refinement": 1,
+    "denser_or_more_explicit_disclosure": 2,
+    "unclear": 3,
+    "little_or_no_count_gap_role": 4,
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -1532,6 +1546,32 @@ def split_cluster_cards(
     return emergent_cards, shifted_content_cards, comparison_cards
 
 
+def cluster_card_sort_key(card: dict[str, Any]) -> tuple[Any, ...]:
+    continuity = str(card["analysis"].get("continuity_judgment", "")).strip()
+    count_gap_role = str(card["analysis"].get("count_gap_role", "")).strip()
+    return (
+        CONTINUITY_READING_PRIORITY.get(continuity, 99),
+        COUNT_GAP_ROLE_PRIORITY.get(count_gap_role, 99),
+        -float(card.get("period_share", 0.0)),
+        -int(card.get("cluster_size", 0)),
+        str(card.get("post_cluster_label", "")),
+    )
+
+
+def build_reading_groups(
+    cluster_cards: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    finding_cards = []
+    baseline_cards = []
+    for card in cluster_cards:
+        continuity = str(card["analysis"].get("continuity_judgment", "")).strip()
+        if continuity == "largely_continuous":
+            baseline_cards.append(card)
+        else:
+            finding_cards.append(card)
+    return sorted(finding_cards, key=cluster_card_sort_key), sorted(baseline_cards, key=cluster_card_sort_key)
+
+
 def emergent_cluster_figure(cluster_cards: list[dict[str, Any]], template_name: str) -> go.Figure:
     emergent_cards = [card for card in cluster_cards if is_emergent_card(card)]
     if not emergent_cards:
@@ -1711,6 +1751,8 @@ def render_report(
     abstract_data: dict[str, Any],
     figures: dict[str, str],
     cluster_cards: list[dict[str, Any]],
+    finding_cards: list[dict[str, Any]],
+    baseline_cards: list[dict[str, Any]],
     emergent_cards: list[dict[str, Any]],
     shifted_content_cards: list[dict[str, Any]],
     comparison_cards: list[dict[str, Any]],
@@ -1725,13 +1767,15 @@ def render_report(
     template = env.get_template(template_path.name)
     return template.render(
         title=abstract_data.get("report_title", "Gemini-assisted period shift report"),
-        subtitle="Narrative synthesis on emergent post-2022 themes and structural shifts after separate pre/post discovery",
+        subtitle="How defense-sector risk disclosure themes changed after 2022, and whether the extra post-2022 structure reflects new themes, thematic splitting, or denser disclosure language.",
         plotly_js=get_plotlyjs(),
         summary=summary_metrics,
         count_shift=count_shift_summary,
         abstract_data=abstract_data,
         figures=figures,
         cluster_cards=cluster_cards,
+        finding_cards=finding_cards,
+        baseline_cards=baseline_cards,
         emergent_cards=emergent_cards,
         shifted_content_cards=shifted_content_cards,
         comparison_cards=comparison_cards,
@@ -1831,6 +1875,7 @@ def main() -> None:
     )
 
     cluster_cards = build_cluster_cards(cluster_packages, cluster_analyses)
+    finding_cards, baseline_cards = build_reading_groups(cluster_cards)
     emergent_cards, shifted_content_cards, comparison_cards = split_cluster_cards(cluster_cards)
     selection_diagnostics_df = build_selection_diagnostics(
         post_selection_df=post_selection_df,
@@ -1937,6 +1982,8 @@ def main() -> None:
         abstract_data=abstract_data,
         figures=figures,
         cluster_cards=cluster_cards,
+        finding_cards=finding_cards,
+        baseline_cards=baseline_cards,
         emergent_cards=emergent_cards,
         shifted_content_cards=shifted_content_cards,
         comparison_cards=comparison_cards,
