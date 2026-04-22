@@ -43,6 +43,7 @@ from render_period_shift_report import (
 DEFAULT_INTERESTING_MATCH_TYPES = ["new_post_only", "split/refined", "merged"]
 PRE_PERIOD = "pre_2022"
 POST_PERIOD = "post_2022"
+DEFAULT_DATASET_PATH = Path("data/final/sec_defense_risk_dataset.csv")
 
 
 def parse_args() -> argparse.Namespace:
@@ -239,6 +240,8 @@ def resolve_dataset_path(args: argparse.Namespace, metadata: dict[str, Any]) -> 
     dataset_value = str(metadata.get("dataset", "")).strip()
     if dataset_value:
         return Path(dataset_value)
+    if DEFAULT_DATASET_PATH.exists():
+        return DEFAULT_DATASET_PATH
     raise ValueError("No dataset path available. Pass --dataset or provide period_shift_metadata.json with a dataset entry.")
 
 

@@ -17,6 +17,7 @@ import argparse
 import html
 import json
 import re
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import shorten
@@ -1195,19 +1196,11 @@ def main() -> None:
     )
     output_html.write_text(html_report, encoding="utf-8")
 
-    if output_pdf:
-        figure_dir = artifacts_dir / "pdf_figures"
-        figure_paths: Dict[str, Path] = {}
-        for key, fig in figure_objects.items():
-            figure_path = figure_dir / f"{key}.png"
-            export_figure_png(fig, figure_path)
-            figure_paths[key] = figure_path
-        build_pdf_report(output_pdf, args.pdf_title, summary_metrics, figure_paths)
-
     metadata = {
         "dataset": args.dataset,
         "output_html": str(output_html),
-        "output_pdf": str(output_pdf) if output_pdf else "",
+        "output_pdf": "",
+        "requested_output_pdf": str(output_pdf) if output_pdf else "",
         "artifacts_dir": str(artifacts_dir),
         "model_name": args.model_name,
         "sample_per_period": args.sample_per_period,
@@ -1215,12 +1208,36 @@ def main() -> None:
         "match_threshold": args.match_threshold,
         "new_cluster_threshold": args.new_cluster_threshold,
         "summary_metrics": summary_metrics,
+        "pdf_error": "",
     }
-    (artifacts_dir / "period_shift_metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    metadata_path = artifacts_dir / "period_shift_metadata.json"
+    metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+
+    if output_pdf:
+        try:
+            figure_dir = artifacts_dir / "pdf_figures"
+            figure_paths: Dict[str, Path] = {}
+            for key, fig in figure_objects.items():
+                figure_path = figure_dir / f"{key}.png"
+                export_figure_png(fig, figure_path)
+                figure_paths[key] = figure_path
+            build_pdf_report(output_pdf, args.pdf_title, summary_metrics, figure_paths)
+            metadata["output_pdf"] = str(output_pdf)
+        except Exception as exc:
+            metadata["pdf_error"] = f"{type(exc).__name__}: {exc}"
+            warnings.warn(
+                "PDF export failed, but the HTML report and CSV/JSON artifacts were still written. "
+                f"Reason: {exc}",
+                RuntimeWarning,
+            )
+        finally:
+            metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
 
     print(f"Rendered HTML report to: {output_html}")
-    if output_pdf:
+    if metadata["output_pdf"]:
         print(f"Rendered PDF report to: {output_pdf}")
+    elif output_pdf:
+        print(f"Skipped PDF report due to export error. See: {metadata_path}")
     print(f"Artifacts written to: {artifacts_dir}")
 
 

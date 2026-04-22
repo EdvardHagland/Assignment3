@@ -119,8 +119,13 @@ The HTML stays interactive. The PDF is the safer static sharing version.
 
 ```python
 from google.colab import files
+import os
+
 files.download("analysis/exploratory_clustering/output/period_shift_report.html")
-files.download("analysis/exploratory_clustering/output/period_shift_report.pdf")
+if os.path.exists("analysis/exploratory_clustering/output/period_shift_report.pdf"):
+    files.download("analysis/exploratory_clustering/output/period_shift_report.pdf")
+else:
+    print("PDF was not generated. Check analysis/exploratory_clustering/output/period_shift_metadata.json for the export error.")
 ```
 
 ## What we want from this first pass
@@ -166,6 +171,7 @@ os.environ["GEMINI_MODEL"] = userdata.get("GEMINI_MODEL")
 ```python
 !python analysis/exploratory_clustering/render_period_shift_llm_report.py \
     --sampled-rows analysis/exploratory_clustering/output/sampled_cluster_rows.csv \
+    --dataset data/final/sec_defense_risk_dataset.csv \
     --period-cluster-summary analysis/exploratory_clustering/output/period_cluster_summary.csv \
     --pairwise-similarities analysis/exploratory_clustering/output/pairwise_cluster_similarities.csv \
     --cluster-matches analysis/exploratory_clustering/output/cluster_matches.csv \
@@ -195,4 +201,5 @@ from google.colab import files
 files.download("analysis/exploratory_clustering/output/period_shift_llm_report.html")
 files.download("analysis/exploratory_clustering/output/llm_cluster_analyses.json")
 files.download("analysis/exploratory_clustering/output/llm_abstract.json")
+files.download("analysis/exploratory_clustering/output/period_shift_metadata.json")
 ```
