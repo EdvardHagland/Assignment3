@@ -487,6 +487,7 @@
   <div class="accent-bar"></div>
   <nav class="nav">
     <a href="#overview">Overview</a>
+    <a href="#count-shift">Count Shift</a>
     <a href="#abstract">Abstract</a>
     <a href="#corpus">Corpus</a>
     <a href="#discovery">Discovery</a>
@@ -507,6 +508,7 @@
         <div class="metric"><div class="metric-label">Emergent discoveries</div><div class="metric-value">{{ summary.emergent_discoveries }}</div></div>
         <div class="metric"><div class="metric-label">Content shifts</div><div class="metric-value">{{ summary.content_shifts }}</div></div>
         <div class="metric"><div class="metric-label">Structural shifts</div><div class="metric-value">{{ summary.structural_shifts }}</div></div>
+        <div class="metric"><div class="metric-label">Cluster gap</div><div class="metric-value">{{ summary.cluster_gap }}</div></div>
         <div class="metric"><div class="metric-label">Match filters</div><div class="metric-value" style="font-size:0.95rem;">{{ summary.match_types }}</div></div>
         <div class="metric"><div class="metric-label">Companies</div><div class="metric-value">{{ summary.companies }}</div></div>
         <div class="metric"><div class="metric-label">Pre clusters</div><div class="metric-value">{{ summary.pre_clusters }}</div></div>
@@ -517,8 +519,23 @@
       </div>
     </section>
 
+    <section class="section" id="count-shift">
+      <div class="section-header">
+        <h2>Cluster Count Shift</h2>
+        <p>{{ count_shift.headline_note }}</p>
+      </div>
+      <div class="grid-2">
+        <div class="figure-card">{{ figures.cluster_count_shift | safe }}</div>
+        <div class="figure-card">{{ figures.period_text_density | safe }}</div>
+      </div>
+      <p class="cluster-text"><strong>Structural reading</strong> {{ count_shift.decomposition_note }}</p>
+      <p class="cluster-text"><strong>Broad-theme check</strong> {{ count_shift.broad_note }}</p>
+      <p class="cluster-text"><strong>Volume caution</strong> {{ count_shift.volume_note }}</p>
+    </section>
+
     <section class="abstract-card" id="abstract">
       <h2>Executive Abstract</h2>
+      <p><strong>Primary result:</strong> {{ abstract_data.primary_result }}</p>
       <p>{{ abstract_data.abstract }}</p>
       <div class="abstract-lists">
         <div class="abstract-box">
@@ -632,6 +649,7 @@
 
           <div class="cluster-text"><strong>Why it was selected</strong> {{ cluster.analysis.why_interesting }}</div>
           <div class="cluster-text"><strong>Change reading</strong> {{ cluster.continuity_label }}. {{ cluster.analysis.continuity_note }}</div>
+          <div class="cluster-text"><strong>Count-gap role</strong> {{ cluster.count_gap_role_label }}. {{ cluster.analysis.count_gap_note }}</div>
           <div class="cluster-text"><strong>Post terms</strong> {{ cluster.top_terms }}</div>
           {% if cluster.best_pre_top_terms %}
           <div class="cluster-text"><strong>Best pre terms</strong> {{ cluster.best_pre_top_terms }}</div>
@@ -725,6 +743,7 @@
 
           <div class="cluster-text"><strong>Why it was selected</strong> {{ cluster.analysis.why_interesting }}</div>
           <div class="cluster-text"><strong>Change reading</strong> {{ cluster.continuity_label }}. {{ cluster.analysis.continuity_note }}</div>
+          <div class="cluster-text"><strong>Count-gap role</strong> {{ cluster.count_gap_role_label }}. {{ cluster.analysis.count_gap_note }}</div>
           <div class="cluster-text"><strong>Post terms</strong> {{ cluster.top_terms }}</div>
           {% if cluster.best_pre_top_terms %}
           <div class="cluster-text"><strong>Best pre terms</strong> {{ cluster.best_pre_top_terms }}</div>
@@ -818,6 +837,7 @@
 
           <div class="cluster-text"><strong>Why it was selected</strong> {{ cluster.analysis.why_interesting }}</div>
           <div class="cluster-text"><strong>Change reading</strong> {{ cluster.continuity_label }}. {{ cluster.analysis.continuity_note }}</div>
+          <div class="cluster-text"><strong>Count-gap role</strong> {{ cluster.count_gap_role_label }}. {{ cluster.analysis.count_gap_note }}</div>
           <div class="cluster-text"><strong>Post terms</strong> {{ cluster.top_terms }}</div>
           {% if cluster.best_pre_top_terms %}
           <div class="cluster-text"><strong>Best pre terms</strong> {{ cluster.best_pre_top_terms }}</div>
@@ -900,6 +920,7 @@
             </div>
             <div class="cluster-text"><strong>Abstract sentence</strong> {{ cluster.analysis.abstract_candidate_sentence }}</div>
             <div class="cluster-text"><strong>Change reading</strong> {{ cluster.continuity_label }}</div>
+            <div class="cluster-text"><strong>Count-gap role</strong> {{ cluster.count_gap_role_label }}</div>
             <div class="cluster-text"><strong>Support IDs</strong> {{ cluster.analysis.supporting_example_ids | join(", ") }}</div>
           </article>
           {% endfor %}
