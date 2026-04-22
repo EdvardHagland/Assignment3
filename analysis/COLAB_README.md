@@ -102,6 +102,18 @@ The current default model is `BAAI/bge-m3`.
     --output-pdf analysis/exploratory_clustering/output/period_shift_report.pdf
 ```
 
+For a true full-corpus run, use `--sample-per-period 0`. That tells the script to use all available rows in each period bucket rather than sampling. `--scatter-display-max-points` still only limits how many points are drawn in the browser figures; it does not limit clustering.
+
+```python
+!python analysis/exploratory_clustering/render_period_shift_report.py \
+    --model-name BAAI/bge-m3 \
+    --sample-per-period 0 \
+    --scatter-display-max-points 6000 \
+    --cluster-min-size 80 \
+    --output-html analysis/exploratory_clustering/output/period_shift_report.html \
+    --output-pdf analysis/exploratory_clustering/output/period_shift_report.pdf
+```
+
 This will write:
 
 - `analysis/exploratory_clustering/output/period_shift_report.html`
@@ -163,6 +175,8 @@ The selection is strict by default:
 - only the match types you explicitly list in `--interesting-match-types`
 - no fallback to weaker clusters if nothing passes the filter
 
+For a true full narrated run, use `--max-clusters 0` and `--persistent-audit-clusters 0`. That tells the script to include all eligible changed clusters and all eligible persistent audit clusters rather than trimming to a top slice.
+
 ```python
 import os
 from google.colab import userdata
@@ -184,6 +198,26 @@ os.environ["GEMINI_MODEL"] = userdata.get("GEMINI_MODEL")
     --output-html analysis/exploratory_clustering/output/period_shift_llm_report.html \
     --interesting-match-types new_post_only,split/refined,merged \
     --max-clusters 6 \
+    --central-examples 4 \
+    --mid-examples 4 \
+    --peripheral-examples 4 \
+    --matched-pre-examples 3
+```
+
+```python
+!python analysis/exploratory_clustering/render_period_shift_llm_report.py \
+    --sampled-rows analysis/exploratory_clustering/output/sampled_cluster_rows.csv \
+    --sampled-embeddings analysis/exploratory_clustering/output/sampled_embeddings.npz \
+    --dataset data/final/sec_defense_risk_dataset.csv \
+    --period-cluster-summary analysis/exploratory_clustering/output/period_cluster_summary.csv \
+    --pairwise-similarities analysis/exploratory_clustering/output/pairwise_cluster_similarities.csv \
+    --cluster-matches analysis/exploratory_clustering/output/cluster_matches.csv \
+    --representative-examples analysis/exploratory_clustering/output/representative_examples.csv \
+    --metadata analysis/exploratory_clustering/output/period_shift_metadata.json \
+    --output-html analysis/exploratory_clustering/output/period_shift_llm_report.html \
+    --interesting-match-types new_post_only,split/refined,merged \
+    --max-clusters 0 \
+    --persistent-audit-clusters 0 \
     --central-examples 4 \
     --mid-examples 4 \
     --peripheral-examples 4 \

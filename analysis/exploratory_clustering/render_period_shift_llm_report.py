@@ -192,13 +192,13 @@ def parse_args() -> argparse.Namespace:
         "--max-clusters",
         type=int,
         default=6,
-        help="Maximum number of interesting post clusters to send to Gemini.",
+        help="Maximum number of interesting post clusters to send to Gemini. Use 0 or a negative value to include all eligible changed clusters.",
     )
     parser.add_argument(
         "--persistent-audit-clusters",
         type=int,
         default=2,
-        help="How many broad persistent clusters to include as audits for same-cluster content drift.",
+        help="How many broad persistent clusters to include as audits for same-cluster content drift. Use 0 or a negative value to include all eligible persistent audit clusters.",
     )
     parser.add_argument(
         "--central-examples",
@@ -440,7 +440,8 @@ def build_post_selection_frame(
     if not main_candidates.empty:
         post_selection_df.loc[main_candidates["index"], "main_candidate_rank"] = np.arange(1, len(main_candidates) + 1)
 
-    post_selection_df["selected_main"] = post_selection_df["main_candidate_rank"].le(max_clusters).fillna(False)
+    main_limit = len(main_candidates) if max_clusters <= 0 else max_clusters
+    post_selection_df["selected_main"] = post_selection_df["main_candidate_rank"].le(main_limit).fillna(False)
     post_selection_df["persistent_audit_candidate"] = (
         (post_selection_df["period_cluster"] != -1)
         & (post_selection_df["eligible_period_theme"].fillna(False))
@@ -456,7 +457,12 @@ def build_post_selection_frame(
     if not persistent_audit_candidates.empty:
         post_selection_df.loc[persistent_audit_candidates["index"], "persistent_audit_rank"] = np.arange(1, len(persistent_audit_candidates) + 1)
 
-    post_selection_df["selected_persistent_audit"] = post_selection_df["persistent_audit_rank"].le(args.persistent_audit_clusters).fillna(False)
+    persistent_audit_limit = (
+        len(persistent_audit_candidates)
+        if args.persistent_audit_clusters <= 0
+        else args.persistent_audit_clusters
+    )
+    post_selection_df["selected_persistent_audit"] = post_selection_df["persistent_audit_rank"].le(persistent_audit_limit).fillna(False)
     post_selection_df["selected_for_llm"] = post_selection_df["selected_main"] | post_selection_df["selected_persistent_audit"]
     post_selection_df["selection_reason"] = ""
     post_selection_df.loc[post_selection_df["selected_main"], "selection_reason"] = "main_match_filter"
@@ -481,12 +487,14 @@ def build_post_selection_frame(
     post_selection_df.loc[
         (~post_selection_df["selected_for_llm"])
         & (post_selection_df["main_candidate"])
+        & (max_clusters > 0)
         & (post_selection_df["main_candidate_rank"] > max_clusters),
         "selection_reason",
     ] = "trimmed_by_max_clusters"
     post_selection_df.loc[
         (~post_selection_df["selected_for_llm"])
         & (post_selection_df["persistent_audit_candidate"])
+        & (args.persistent_audit_clusters > 0)
         & (post_selection_df["persistent_audit_rank"] > args.persistent_audit_clusters),
         "selection_reason",
     ] = "outside_persistent_audit_limit"

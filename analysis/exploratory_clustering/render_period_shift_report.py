@@ -114,7 +114,7 @@ def parse_args() -> argparse.Namespace:
         "--sample-per-period",
         type=int,
         default=3000,
-        help="Maximum rows to sample per period bucket.",
+        help="Maximum rows to sample per period bucket. Use 0 or a negative value to use all available rows in each period.",
     )
     parser.add_argument(
         "--batch-size",
@@ -276,7 +276,10 @@ def load_dataset(path: Path) -> pd.DataFrame:
 def sample_corpus(df: pd.DataFrame, sample_per_period: int, random_state: int) -> pd.DataFrame:
     samples = []
     for _, part in df.groupby("period_bucket", sort=True):
-        samples.append(part.sample(min(len(part), sample_per_period), random_state=random_state))
+        if sample_per_period <= 0 or sample_per_period >= len(part):
+            samples.append(part.copy())
+        else:
+            samples.append(part.sample(sample_per_period, random_state=random_state))
     sampled_df = pd.concat(samples, ignore_index=True)
     sampled_df["sampled_index"] = np.arange(len(sampled_df))
     return sampled_df
