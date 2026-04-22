@@ -600,6 +600,7 @@
           </div>
 
           <div class="cluster-text"><strong>Why it was selected</strong> {{ cluster.analysis.why_interesting }}</div>
+          <div class="cluster-text"><strong>Change reading</strong> {{ cluster.continuity_label }}. {{ cluster.analysis.continuity_note }}</div>
           <div class="cluster-text"><strong>Post terms</strong> {{ cluster.top_terms }}</div>
           {% if cluster.best_pre_top_terms %}
           <div class="cluster-text"><strong>Best pre terms</strong> {{ cluster.best_pre_top_terms }}</div>
@@ -692,6 +693,7 @@
           </div>
 
           <div class="cluster-text"><strong>Why it was selected</strong> {{ cluster.analysis.why_interesting }}</div>
+          <div class="cluster-text"><strong>Change reading</strong> {{ cluster.continuity_label }}. {{ cluster.analysis.continuity_note }}</div>
           <div class="cluster-text"><strong>Post terms</strong> {{ cluster.top_terms }}</div>
           {% if cluster.best_pre_top_terms %}
           <div class="cluster-text"><strong>Best pre terms</strong> {{ cluster.best_pre_top_terms }}</div>
@@ -773,6 +775,7 @@
               <div class="cluster-meta">{{ cluster.match_label }}</div>
             </div>
             <div class="cluster-text"><strong>Abstract sentence</strong> {{ cluster.analysis.abstract_candidate_sentence }}</div>
+            <div class="cluster-text"><strong>Change reading</strong> {{ cluster.continuity_label }}</div>
             <div class="cluster-text"><strong>Support IDs</strong> {{ cluster.analysis.supporting_example_ids | join(", ") }}</div>
           </article>
           {% endfor %}

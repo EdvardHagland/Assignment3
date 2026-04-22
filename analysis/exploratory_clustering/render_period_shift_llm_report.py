@@ -55,6 +55,15 @@ PRE_PERIOD = "pre_2022"
 POST_PERIOD = "post_2022"
 DEFAULT_DATASET_PATH = Path("data/final/sec_defense_risk_dataset.csv")
 EMERGENT_MATCH_TYPE = "new_post_only"
+CLUSTER_ANALYSIS_PROMPT_VERSION = 2
+ABSTRACT_PROMPT_VERSION = 2
+CONTINUITY_LABELS = {
+    "largely_continuous": "Largely continuous",
+    "same_cluster_shifted_contents": "Same cluster, shifted contents",
+    "clear_structural_change": "Clear structural change",
+    "genuinely_new_theme": "Genuinely new theme",
+    "weak_or_unclear_change": "Weak or unclear change",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -242,6 +251,14 @@ def read_json(path: Path) -> dict[str, Any]:
 def write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def normalize_cluster_analysis(analysis: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(analysis)
+    normalized.setdefault("continuity_judgment", "weak_or_unclear_change")
+    normalized.setdefault("continuity_note", "This run did not include a more specific continuity judgment.")
+    normalized.setdefault("_prompt_version", CLUSTER_ANALYSIS_PROMPT_VERSION)
+    return normalized
 
 
 def load_inputs(args: argparse.Namespace) -> dict[str, Any]:
@@ -625,6 +642,8 @@ def gemini_json_schema_cluster() -> dict[str, Any]:
             "headline",
             "why_interesting",
             "interpretation",
+            "continuity_judgment",
+            "continuity_note",
             "evidence_points",
             "genre_caveat",
             "use_in_abstract",
@@ -637,6 +656,17 @@ def gemini_json_schema_cluster() -> dict[str, Any]:
             "headline": {"type": "string"},
             "why_interesting": {"type": "string"},
             "interpretation": {"type": "string"},
+            "continuity_judgment": {
+                "type": "string",
+                "enum": [
+                    "largely_continuous",
+                    "same_cluster_shifted_contents",
+                    "clear_structural_change",
+                    "genuinely_new_theme",
+                    "weak_or_unclear_change",
+                ],
+            },
+            "continuity_note": {"type": "string"},
             "evidence_points": {
                 "type": "array",
                 "items": {"type": "string"},
@@ -749,6 +779,7 @@ def build_cluster_prompt(cluster_package: dict[str, Any]) -> str:
             - Treat this first as a discovery question, not as a forced comparison question.
             - Ask whether this looks like a genuinely emergent post-2022 disclosure theme with breadth across firms and filings.
             - A post-only cluster can still be analytically important even if it is somewhat narrower than the broad structural-comparison clusters, as long as it is not just one-firm language.
+            - Distinguish between a genuinely new theme and a cluster that only looks new because post-2022 wording became slightly more explicit or semantically denser.
             - If the cluster seems broad and coherent, say what became newly explicit after 2022.
             - If the cluster instead looks like firm-specific wording, boilerplate drift, or a weak novelty claim, say that clearly.
             - Do not force a pre-2022 analogue if the evidence package suggests there is none.
@@ -761,6 +792,8 @@ def build_cluster_prompt(cluster_package: dict[str, Any]) -> str:
             - Treat this as a structural change question.
             - Judge whether the post cluster looks like a refinement, merger, or reframing of earlier pre-2022 themes.
             - Be explicit about what appears continuous versus what appears newly differentiated.
+            - A high embedding similarity does not mean nothing changed. The cluster may still carry a slightly different disclosure center of gravity, risk emphasis, or example mix in the post period.
+            - Distinguish between true structural change and a same-cluster case where the contents shifted but the embedding model still places the clusters close together.
             """
         ).strip()
     return textwrap.dedent(
@@ -781,10 +814,21 @@ def build_cluster_prompt(cluster_package: dict[str, Any]) -> str:
         - Use the mid-distance examples to see whether the theme still holds once you move away from the centroid.
         - Use the peripheral examples to test how broad the cluster still is near its outer edge.
         - Use the matched pre examples to judge whether this is genuinely new, more specific, or simply a renamed variant of an earlier theme.
+        - Do not rely on centroid similarity alone. Sometimes the embedding model will keep two clusters close even when the post examples show a shifted emphasis, more explicit wording, or a somewhat different internal mix of risks.
+        - Your job is to say whether the post cluster is mostly continuous, subtly shifted in content, structurally changed, or genuinely new.
         - Be critical and restrained. If the evidence is weak or mixed, say so.
         - For broad new_post_only clusters, treat emergence itself as a potential finding.
 
         {focus_guidance}
+
+        Required interpretation rule:
+        - Fill `continuity_judgment` with exactly one of:
+          - `largely_continuous`: pre and post appear mostly similar in substance.
+          - `same_cluster_shifted_contents`: the cluster still looks like roughly the same thematic family, but the post examples show a noticeable shift in emphasis, explicitness, or internal composition.
+          - `clear_structural_change`: the post cluster looks substantively reorganized, split/refined, merged, or reframed relative to the pre examples.
+          - `genuinely_new_theme`: the post cluster looks meaningfully new rather than just a variant of the older theme.
+          - `weak_or_unclear_change`: evidence is too mixed, thin, or boilerplate-heavy to say confidently.
+        - Use `continuity_note` to explain that judgment in one concise sentence.
 
         Return JSON only, matching the schema exactly.
 
@@ -823,6 +867,7 @@ def build_abstract_prompt(
         - Broad structural-comparison clusters and emergent discovery clusters do not use identical narration filters here; emergent clusters are allowed to be somewhat narrower as long as they still span multiple firms and filings.
         - Do not claim one-to-one cluster identity across periods.
         - Use careful language such as "post-2022 disclosures appear to..." or "the post period shows a more explicit subtheme around..."
+        - Treat "same cluster, shifted contents" as a real result category when the cluster family appears stable but the post examples show a changed center of gravity or more explicit disclosure emphasis.
         - The abstract should synthesize the major findings across the interesting changed clusters, not repeat every detail.
         - If the strongest evidence points to genuinely emergent post-2022 themes, lead with those before the split/refined or merged cases.
         - Mention limitations explicitly.
@@ -909,11 +954,17 @@ def run_cluster_analysis(
     saved_progress: dict[str, dict[str, Any]] = {}
     if progress_path.exists():
         try:
-            rows = read_json(progress_path)
-            if isinstance(rows, list):
+            progress_payload = read_json(progress_path)
+            if isinstance(progress_payload, dict):
+                rows = progress_payload.get("rows", [])
+                progress_version = int(progress_payload.get("prompt_version", -1))
+            else:
+                rows = progress_payload
+                progress_version = -1
+            if progress_version == CLUSTER_ANALYSIS_PROMPT_VERSION and isinstance(rows, list):
                 for row in rows:
                     if isinstance(row, dict) and "post_cluster_label" in row and "analysis" in row:
-                        saved_progress[str(row["post_cluster_label"])] = row["analysis"]
+                        saved_progress[str(row["post_cluster_label"])] = normalize_cluster_analysis(row["analysis"])
         except Exception:
             saved_progress = {}
 
@@ -925,7 +976,13 @@ def run_cluster_analysis(
             if label in saved_progress:
                 progress_rows.append({"post_cluster_label": label, "analysis": saved_progress[label]})
                 output_rows.append(saved_progress[label])
-        write_json(progress_path, progress_rows)
+        write_json(
+            progress_path,
+            {
+                "prompt_version": CLUSTER_ANALYSIS_PROMPT_VERSION,
+                "rows": progress_rows,
+            },
+        )
         write_json(output_path, output_rows)
 
     analyses = []
@@ -941,6 +998,8 @@ def run_cluster_analysis(
                 "headline": "LLM step skipped.",
                 "why_interesting": f"{package['match_label']} cluster selected for narrative review.",
                 "interpretation": "No Gemini interpretation was generated because --skip-llm was used.",
+                "continuity_judgment": "weak_or_unclear_change",
+                "continuity_note": "Continuity judgment unavailable because Gemini was skipped for this run.",
                 "evidence_points": [
                     "Central examples capture the cluster core.",
                     "Peripheral examples test whether the theme remains coherent away from the centroid.",
@@ -951,6 +1010,7 @@ def run_cluster_analysis(
                 "confidence": "low",
                 "supporting_example_ids": [example["example_id"] for example in package["central_post_examples"][:1]],
             }
+            analysis = normalize_cluster_analysis(analysis)
             saved_progress[cluster_label] = analysis
             analyses.append(analysis)
             persist_progress()
@@ -964,6 +1024,7 @@ def run_cluster_analysis(
             schema=gemini_json_schema_cluster(),
             temperature=temperature,
         )
+        analysis = normalize_cluster_analysis(analysis)
         saved_progress[cluster_label] = analysis
         analyses.append(analysis)
         persist_progress()
@@ -984,13 +1045,18 @@ def run_abstract_analysis(
     if output_path.exists():
         try:
             payload = read_json(output_path)
-            if isinstance(payload, dict) and payload:
+            if (
+                isinstance(payload, dict)
+                and payload
+                and int(payload.get("_prompt_version", -1)) == ABSTRACT_PROMPT_VERSION
+            ):
                 return payload
         except Exception:
             pass
 
     if skip_llm:
         abstract = {
+            "_prompt_version": ABSTRACT_PROMPT_VERSION,
             "report_title": "LLM abstract skipped",
             "abstract": "The evidence package was built successfully, but Gemini was not called because --skip-llm was used.",
             "major_findings": [
@@ -1015,6 +1081,7 @@ def run_abstract_analysis(
         schema=gemini_json_schema_abstract(),
         temperature=temperature,
     )
+    abstract["_prompt_version"] = ABSTRACT_PROMPT_VERSION
     write_json(output_path, abstract)
     return abstract
 
@@ -1129,6 +1196,7 @@ def build_cluster_cards(
 ) -> list[dict[str, Any]]:
     cards = []
     for package, analysis in zip(cluster_packages, cluster_analyses):
+        analysis = normalize_cluster_analysis(analysis)
         match_type = package["match_type"]
         cards.append(
             {
@@ -1151,6 +1219,10 @@ def build_cluster_cards(
                 "peripheral_post_examples": package["peripheral_post_examples"],
                 "matched_pre_examples": package["matched_pre_examples"],
                 "analysis": analysis,
+                "continuity_label": CONTINUITY_LABELS.get(
+                    analysis.get("continuity_judgment", ""),
+                    str(analysis.get("continuity_judgment", "")).replace("_", " ").strip().title(),
+                ),
             }
         )
     return cards
