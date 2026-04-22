@@ -198,8 +198,18 @@ This will write:
 
 ```python
 from google.colab import files
-files.download("analysis/exploratory_clustering/output/period_shift_llm_report.html")
-files.download("analysis/exploratory_clustering/output/llm_cluster_analyses.json")
-files.download("analysis/exploratory_clustering/output/llm_abstract.json")
+import os
+
+if os.path.exists("analysis/exploratory_clustering/output/period_shift_llm_report.html"):
+    files.download("analysis/exploratory_clustering/output/period_shift_llm_report.html")
+else:
+    print("LLM report HTML was not generated.")
+
+if os.path.exists("analysis/exploratory_clustering/output/llm_cluster_analyses.json"):
+    files.download("analysis/exploratory_clustering/output/llm_cluster_analyses.json")
+
+if os.path.exists("analysis/exploratory_clustering/output/llm_abstract.json"):
+    files.download("analysis/exploratory_clustering/output/llm_abstract.json")
+
 files.download("analysis/exploratory_clustering/output/period_shift_metadata.json")
 ```

@@ -29,6 +29,8 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from plotly.offline import get_plotlyjs
 
 from render_period_shift_report import (
+    MATCH_TYPE_LABELS,
+    MATCH_TYPE_PRIORITY,
     build_display_sample,
     corpus_overview_figure,
     match_heatmap_figure,
@@ -975,6 +977,15 @@ def main() -> None:
     template_name = build_plotly_template()
     pre_summary_df = summary_df[summary_df["period_bucket"] == PRE_PERIOD].copy()
     post_summary_df = summary_df[summary_df["period_bucket"] == POST_PERIOD].copy()
+    post_catalog_df = post_summary_df.merge(
+        matches_df,
+        left_on="period_cluster_label",
+        right_on="post_cluster_label",
+        how="left",
+    )
+    post_catalog_df["match_type"] = post_catalog_df["match_type"].fillna("new_post_only")
+    post_catalog_df["match_label"] = post_catalog_df["match_type"].map(MATCH_TYPE_LABELS).fillna("New post-only")
+    post_catalog_df["match_priority"] = post_catalog_df["match_type"].map(MATCH_TYPE_PRIORITY).fillna(0).astype(int)
     global_display_df = build_display_sample(sampled_df, 4000, 42, "period_bucket")
     pre_display_df = build_display_sample(sampled_df[sampled_df["period_bucket"] == PRE_PERIOD].copy(), 2000, 42, "period_cluster_label")
     post_display_df = build_display_sample(sampled_df[sampled_df["period_bucket"] == POST_PERIOD].copy(), 2000, 42, "period_cluster_label")
