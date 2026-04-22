@@ -511,7 +511,7 @@
         <div class="metric"><div class="metric-label">Post clusters</div><div class="metric-value">{{ summary.post_clusters }}</div></div>
         <div class="metric"><div class="metric-label">Embedding model</div><div class="metric-value" style="font-size:0.92rem;">{{ summary.embedding_model }}</div></div>
         <div class="metric"><div class="metric-label">LLM model</div><div class="metric-value" style="font-size:0.92rem;">{{ summary.llm_model }}</div></div>
-        <div class="metric"><div class="metric-label">Sample rows</div><div class="metric-value">{{ summary.sample_rows }}</div></div>
+        <div class="metric"><div class="metric-label">Clustered rows</div><div class="metric-value">{{ summary.clustered_rows }}</div></div>
       </div>
     </section>
 
@@ -527,7 +527,11 @@
         </div>
         <div class="abstract-box">
           <h3>Method</h3>
-          <p>All rows were embedded once with the same model, then clustered separately for the pre-2022 and post-2022 subsets. Post clusters were approximately matched back to pre clusters, and Gemini was used only after that evidence layer existed, one cluster at a time, to interpret whether each selected cluster looks new, refined, shifted in contents, or largely continuous.</p>
+          {% if is_full_corpus_run %}
+          <p>The full corpus was embedded once with the same model, then clustered separately for the pre-2022 and post-2022 subsets. Post clusters were approximately matched back to pre clusters, and Gemini was used only after that evidence layer existed, one cluster at a time, to interpret whether each selected cluster looks new, refined, shifted in contents, or largely continuous.</p>
+          {% else %}
+          <p>The rows included in the clustering run were embedded once with the same model, then clustered separately for the pre-2022 and post-2022 subsets. Post clusters were approximately matched back to pre clusters, and Gemini was used only after that evidence layer existed, one cluster at a time, to interpret whether each selected cluster looks new, refined, shifted in contents, or largely continuous.</p>
+          {% endif %}
         </div>
       </div>
       <div class="abstract-box" style="margin-top: 14px;">
@@ -554,6 +558,12 @@
     <section class="abstract-card">
       <h2>Interpretive Summary</h2>
       <p>{{ abstract_data.abstract }}</p>
+      {% if abstract_data.boilerplate_envelope_finding %}
+      <div class="abstract-box" style="margin-top: 14px;">
+        <h3>Boilerplate-envelope reading</h3>
+        <p>{{ abstract_data.boilerplate_envelope_finding }}</p>
+      </div>
+      {% endif %}
       <div class="abstract-lists">
         <div class="abstract-box">
           <h3>Major Findings</h3>
@@ -572,12 +582,28 @@
           </ul>
         </div>
       </div>
+      {% if abstract_data.layer_asymmetries %}
+      <div class="abstract-box" style="margin-top: 14px;">
+        <h3>Prime vs supplier asymmetries</h3>
+        <ul>
+          {% for item in abstract_data.layer_asymmetries %}
+          <li>{{ item }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+      {% if abstract_data.intra_cluster_churn_caveat %}
+      <div class="abstract-box" style="margin-top: 14px;">
+        <h3>Intra-cluster churn caveat</h3>
+        <p>{{ abstract_data.intra_cluster_churn_caveat }}</p>
+      </div>
+      {% endif %}
       <p><strong>Caution:</strong> {{ abstract_data.closing_caution }}</p>
     </section>
 
     <section class="section" id="corpus">
       <div class="section-header">
-        <h2>Method Appendix: Corpus and Sample Structure</h2>
+        <h2>Method Appendix: Corpus and Clustering Base</h2>
         <p>This appendix keeps the evidence trail visible. The Gemini layer sits on top of these artifacts; it does not replace the separate-clustering workflow.</p>
       </div>
       <div class="grid-2">
@@ -665,11 +691,28 @@
             <div class="stat-box"><strong>Best cosine</strong><span>{% if cluster.best_pre_similarity == cluster.best_pre_similarity %}{{ "%.2f"|format(cluster.best_pre_similarity) }}{% else %}n/a{% endif %}</span></div>
             <div class="stat-box"><strong>Match</strong><span>{{ cluster.best_pre_cluster_label or "none" }}</span></div>
             <div class="stat-box"><strong>Confidence</strong><span>{{ cluster.analysis.confidence }}</span></div>
+            <div class="stat-box"><strong>Top-ticker share</strong><span>{{ "%.0f"|format(cluster.top_ticker_share * 100) }}%</span></div>
+            <div class="stat-box"><strong>Prime / Supplier</strong><span>{{ "%.0f"|format(cluster.prime_share * 100) }}% / {{ "%.0f"|format(cluster.supplier_share * 100) }}%</span></div>
           </div>
 
           <div class="cluster-text"><strong>Why it was selected</strong> {{ cluster.analysis.why_interesting }}</div>
           <div class="cluster-text"><strong>Change reading</strong> {{ cluster.continuity_label }}. {{ cluster.analysis.continuity_note }}</div>
           <div class="cluster-text"><strong>Count-gap role</strong> {{ cluster.count_gap_role_label }}. {{ cluster.analysis.count_gap_note }}</div>
+          {% if cluster.analysis.layer_reading %}
+          <div class="cluster-text"><strong>Prime vs supplier</strong> {{ cluster.analysis.layer_reading }}</div>
+          {% endif %}
+          {% if cluster.analysis.concentration_note %}
+          <div class="cluster-text"><strong>Concentration</strong> {{ cluster.analysis.concentration_note }}</div>
+          {% endif %}
+          {% if cluster.analysis.temporal_reading_post %}
+          <div class="cluster-text"><strong>Temporal trajectory (post)</strong> {{ cluster.analysis.temporal_reading_post }}</div>
+          {% endif %}
+          {% if cluster.analysis.intra_cluster_churn_note %}
+          <div class="cluster-text"><strong>Intra-cluster churn</strong> {{ cluster.analysis.intra_cluster_churn_note }}</div>
+          {% endif %}
+          {% if cluster.analysis.category_blending_note %}
+          <div class="cluster-text"><strong>Category blending</strong> {{ cluster.analysis.category_blending_note }}</div>
+          {% endif %}
           <div class="cluster-text"><strong>Post terms</strong> {{ cluster.top_terms }}</div>
           {% if cluster.best_pre_top_terms %}
           <div class="cluster-text"><strong>Best pre terms</strong> {{ cluster.best_pre_top_terms }}</div>
@@ -759,11 +802,28 @@
             <div class="stat-box"><strong>Best cosine</strong><span>{% if cluster.best_pre_similarity == cluster.best_pre_similarity %}{{ "%.2f"|format(cluster.best_pre_similarity) }}{% else %}n/a{% endif %}</span></div>
             <div class="stat-box"><strong>Match</strong><span>{{ cluster.best_pre_cluster_label or "none" }}</span></div>
             <div class="stat-box"><strong>Confidence</strong><span>{{ cluster.analysis.confidence }}</span></div>
+            <div class="stat-box"><strong>Top-ticker share</strong><span>{{ "%.0f"|format(cluster.top_ticker_share * 100) }}%</span></div>
+            <div class="stat-box"><strong>Prime / Supplier</strong><span>{{ "%.0f"|format(cluster.prime_share * 100) }}% / {{ "%.0f"|format(cluster.supplier_share * 100) }}%</span></div>
           </div>
 
           <div class="cluster-text"><strong>Why it was selected</strong> {{ cluster.analysis.why_interesting }}</div>
           <div class="cluster-text"><strong>Change reading</strong> {{ cluster.continuity_label }}. {{ cluster.analysis.continuity_note }}</div>
           <div class="cluster-text"><strong>Count-gap role</strong> {{ cluster.count_gap_role_label }}. {{ cluster.analysis.count_gap_note }}</div>
+          {% if cluster.analysis.layer_reading %}
+          <div class="cluster-text"><strong>Prime vs supplier</strong> {{ cluster.analysis.layer_reading }}</div>
+          {% endif %}
+          {% if cluster.analysis.concentration_note %}
+          <div class="cluster-text"><strong>Concentration</strong> {{ cluster.analysis.concentration_note }}</div>
+          {% endif %}
+          {% if cluster.analysis.temporal_reading_post %}
+          <div class="cluster-text"><strong>Temporal trajectory (post)</strong> {{ cluster.analysis.temporal_reading_post }}</div>
+          {% endif %}
+          {% if cluster.analysis.intra_cluster_churn_note %}
+          <div class="cluster-text"><strong>Intra-cluster churn</strong> {{ cluster.analysis.intra_cluster_churn_note }}</div>
+          {% endif %}
+          {% if cluster.analysis.category_blending_note %}
+          <div class="cluster-text"><strong>Category blending</strong> {{ cluster.analysis.category_blending_note }}</div>
+          {% endif %}
           <div class="cluster-text"><strong>Post terms</strong> {{ cluster.top_terms }}</div>
           {% if cluster.best_pre_top_terms %}
           <div class="cluster-text"><strong>Best pre terms</strong> {{ cluster.best_pre_top_terms }}</div>
@@ -864,7 +924,7 @@
     </section>
 
     <p class="footer">
-      Generated from <code>{{ generated_from }}</code><br>
+      Source dataset <code>{{ source_dataset }}</code><br>
       This report is still exploratory. Gemini is being used as an evidence-constrained analytical writer, not as a source of independent facts.
     </p>
   </div>

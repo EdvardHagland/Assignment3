@@ -56,8 +56,8 @@ PRE_PERIOD = "pre_2022"
 POST_PERIOD = "post_2022"
 DEFAULT_DATASET_PATH = Path("data/final/sec_defense_risk_dataset.csv")
 EMERGENT_MATCH_TYPE = "new_post_only"
-CLUSTER_ANALYSIS_PROMPT_VERSION = 4
-ABSTRACT_PROMPT_VERSION = 4
+CLUSTER_ANALYSIS_PROMPT_VERSION = 5
+ABSTRACT_PROMPT_VERSION = 5
 CONTENT_SHIFT_JUDGMENT = "same_cluster_shifted_contents"
 EMERGENT_JUDGMENT = "genuinely_new_theme"
 CONTINUITY_LABELS = {
@@ -289,7 +289,21 @@ def normalize_cluster_analysis(analysis: dict[str, Any]) -> dict[str, Any]:
     normalized.setdefault("continuity_note", "This run did not include a more specific continuity judgment.")
     normalized.setdefault("count_gap_role", "unclear")
     normalized.setdefault("count_gap_note", "This run did not include a more specific cluster-count role judgment.")
+    normalized.setdefault("layer_reading", "")
+    normalized.setdefault("concentration_note", "")
+    normalized.setdefault("temporal_reading_post", "")
+    normalized.setdefault("intra_cluster_churn_note", "")
+    normalized.setdefault("category_blending_note", "")
     normalized.setdefault("_prompt_version", CLUSTER_ANALYSIS_PROMPT_VERSION)
+    return normalized
+
+
+def normalize_abstract(abstract: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(abstract)
+    normalized.setdefault("boilerplate_envelope_finding", "")
+    normalized.setdefault("layer_asymmetries", [])
+    normalized.setdefault("intra_cluster_churn_caveat", "")
+    normalized.setdefault("_prompt_version", ABSTRACT_PROMPT_VERSION)
     return normalized
 
 
@@ -710,6 +724,18 @@ def build_cluster_evidence_package(
     if pre_rows.empty and not pre_cluster_rows.empty:
         pre_rows = pre_cluster_rows.sort_values("distance_percentile").head(args.matched_pre_examples).copy()
 
+    central_post_examples = format_example_rows(central_post_rows, f"{post_label}_core")
+    mid_post_examples = format_example_rows(mid_post_rows, f"{post_label}_mid")
+    peripheral_post_examples = format_example_rows(peripheral_post_rows, f"{post_label}_edge")
+    matched_pre_examples = format_example_rows(pre_rows, f"{pre_label or 'pre'}_match")
+
+    post_year_distribution = build_post_year_distribution(
+        central_post_examples + mid_post_examples + peripheral_post_examples
+    )
+
+    top_ticker_share_value = float(cluster_row.get("top_ticker_share", 0.0)) if pd.notna(cluster_row.get("top_ticker_share", 0.0)) else 0.0
+    top_ticker_n_value = int(cluster_row.get("top_ticker_n", 0)) if pd.notna(cluster_row.get("top_ticker_n", 0)) else 0
+
     packaged = {
         "post_cluster_label": post_label,
         "match_type": str(cluster_row["match_type"]),
@@ -720,19 +746,33 @@ def build_cluster_evidence_package(
         "filing_count": int(cluster_row["filing_count"]),
         "top_terms": str(cluster_row["top_terms"]),
         "top_tickers": str(cluster_row.get("top_tickers", "")),
+        "top_ticker_share": top_ticker_share_value,
+        "top_ticker_n": top_ticker_n_value,
         "prime_share": float(cluster_row.get("prime", 0.0)),
         "supplier_share": float(cluster_row.get("supplier", 0.0)),
+        "post_year_distribution": post_year_distribution,
         "best_pre_cluster_label": pre_label,
         "best_pre_similarity": float(cluster_row.get("best_pre_similarity", np.nan)),
         "best_pre_top_terms": str(cluster_row.get("best_pre_top_terms", "")),
         "shared_terms": str(cluster_row.get("shared_terms", "")),
         "top_pre_candidates": str(cluster_row.get("top_pre_candidates", "")),
-        "central_post_examples": format_example_rows(central_post_rows, f"{post_label}_core"),
-        "mid_post_examples": format_example_rows(mid_post_rows, f"{post_label}_mid"),
-        "peripheral_post_examples": format_example_rows(peripheral_post_rows, f"{post_label}_edge"),
-        "matched_pre_examples": format_example_rows(pre_rows, f"{pre_label or 'pre'}_match"),
+        "central_post_examples": central_post_examples,
+        "mid_post_examples": mid_post_examples,
+        "peripheral_post_examples": peripheral_post_examples,
+        "matched_pre_examples": matched_pre_examples,
     }
     return packaged
+
+
+def build_post_year_distribution(examples: list[dict[str, Any]]) -> dict[str, int]:
+    distribution: dict[str, int] = {}
+    for example in examples:
+        year = example.get("filing_year")
+        if year is None:
+            continue
+        key = str(int(year))
+        distribution[key] = distribution.get(key, 0) + 1
+    return dict(sorted(distribution.items()))
 
 
 def build_all_evidence_packages(
@@ -781,6 +821,11 @@ def gemini_json_schema_cluster() -> dict[str, Any]:
             "continuity_note",
             "count_gap_role",
             "count_gap_note",
+            "layer_reading",
+            "concentration_note",
+            "temporal_reading_post",
+            "intra_cluster_churn_note",
+            "category_blending_note",
             "evidence_points",
             "genre_caveat",
             "use_in_abstract",
@@ -815,6 +860,11 @@ def gemini_json_schema_cluster() -> dict[str, Any]:
                 ],
             },
             "count_gap_note": {"type": "string"},
+            "layer_reading": {"type": "string"},
+            "concentration_note": {"type": "string"},
+            "temporal_reading_post": {"type": "string"},
+            "intra_cluster_churn_note": {"type": "string"},
+            "category_blending_note": {"type": "string"},
             "evidence_points": {
                 "type": "array",
                 "items": {"type": "string"},
@@ -841,11 +891,28 @@ def gemini_json_schema_cluster() -> dict[str, Any]:
 def gemini_json_schema_abstract() -> dict[str, Any]:
     return {
         "type": "object",
-        "required": ["report_title", "primary_result", "abstract", "major_findings", "limitations", "closing_caution"],
+        "required": [
+            "report_title",
+            "primary_result",
+            "abstract",
+            "boilerplate_envelope_finding",
+            "layer_asymmetries",
+            "major_findings",
+            "limitations",
+            "intra_cluster_churn_caveat",
+            "closing_caution",
+        ],
         "properties": {
             "report_title": {"type": "string"},
             "primary_result": {"type": "string"},
             "abstract": {"type": "string"},
+            "boilerplate_envelope_finding": {"type": "string"},
+            "layer_asymmetries": {
+                "type": "array",
+                "items": {"type": "string"},
+                "minItems": 0,
+                "maxItems": 4,
+            },
             "major_findings": {
                 "type": "array",
                 "items": {"type": "string"},
@@ -858,6 +925,7 @@ def gemini_json_schema_abstract() -> dict[str, Any]:
                 "minItems": 2,
                 "maxItems": 4,
             },
+            "intra_cluster_churn_caveat": {"type": "string"},
             "closing_caution": {"type": "string"},
         },
     }
@@ -957,6 +1025,11 @@ def build_cluster_prompt(cluster_package: dict[str, Any], report_context: dict[s
         - You should describe shifts in disclosure emphasis or thematic structure, not claim direct changes in real-world risk incidence unless the text package clearly supports it.
         - Be especially cautious when the evidence is concentrated in a small number of firms or looks like routine filing boilerplate.
 
+        Non-fabrication rule:
+        - Every claim you make must be grounded in the evidence package or the global count-shift context supplied below.
+        - Do not invent events, firms, dates, or regulatory actions that are not present in the text of the examples or in the provided fields.
+        - If a field such as `temporal_reading_post` or `layer_reading` cannot be answered from the evidence package, say so explicitly rather than guessing.
+
         Your task:
         - Analyze one interesting post-2022 cluster and its best pre-2022 comparison context.
         - Focus on why this cluster was flagged as interesting.
@@ -988,6 +1061,37 @@ def build_cluster_prompt(cluster_package: dict[str, Any], report_context: dict[s
           - `unclear`: the evidence is too mixed to say.
         - Use `count_gap_note` to explain that judgment in one concise sentence.
 
+        Required secondary readings (each one concise sentence, grounded in the evidence package):
+
+        1. `layer_reading`
+        - Read `prime_share` and `supplier_share` and the `company_layer` field on individual examples.
+        - If the cluster leans strongly toward primes or suppliers (for example, one layer above 0.75), name that asymmetry and briefly say what it implies for the theme.
+        - If the cluster is mixed or roughly balanced, say so and do not invent an asymmetry.
+        - If the shares sum to roughly zero because layer metadata is missing, write "Layer composition unavailable from the evidence package."
+
+        2. `concentration_note`
+        - Read `top_tickers`, `top_ticker_share`, and `top_ticker_n`.
+        - If `top_ticker_share` is above roughly 0.25, flag this cluster as top-ticker concentrated and name the dominant ticker.
+        - If the cluster spreads across many tickers, say so and note that this strengthens the claim that the theme is sectoral rather than firm-specific.
+        - Do not override the clustering screens that already admitted this cluster; just report what the concentration numbers show.
+
+        3. `temporal_reading_post`
+        - Read `post_year_distribution` and the `filing_year` field on post examples.
+        - If the post evidence clusters into a narrow year range (for example, only 2024-2025), say so and note that the theme may track a specific policy or event window.
+        - If the post evidence is spread relatively evenly across the post period, say so and note that the theme reads as persistent post-2022 disclosure rather than a single-year spike.
+        - If the year distribution is too thin or mixed to judge, say so explicitly.
+
+        4. `intra_cluster_churn_note`
+        - Embeddings can keep a cluster stable across periods even when the contents inside the cluster have shifted substantially (for example, a supply-chain cluster whose internal mix moves from generic sourcing language toward semiconductor and titanium sourcing after 2022).
+        - Compare the matched pre examples against the central and mid post examples. If the cluster family looks continuous but the internal emphasis has clearly changed (new named risks, new regulations, new firms or geographies), name that intra-cluster churn even if `continuity_judgment` is `largely_continuous` or `same_cluster_shifted_contents`.
+        - If you genuinely see no such internal churn, say so.
+        - This field should make explicit what pure cluster-identity analysis risks hiding.
+
+        5. `category_blending_note`
+        - Embedding clusters sometimes bundle together text that a conceptual taxonomy would separate. The project's working taxonomy distinguishes, among others, Government budget and procurement; Contract execution and economics; Supply chain and industrial base; Labor, clearances, and human capital; Cyber, data, and IT systems; Legal, regulatory, and compliance; Geopolitical, international, sanctions, and export controls; Macro, financial, and capital markets; Technology, product, AI, and autonomy; Intellectual property; M&A and portfolio strategy; Environmental, climate, ESG, and safety; Governance, securities, and shareholder risk; and Pandemic and public-health risk.
+        - If this embedding cluster visibly mixes two or more of those conceptual categories (for example, legal compliance plus cyber, or export controls plus broader international risk), name the mixed categories in one concise sentence.
+        - If the cluster cleanly matches a single conceptual category, say so. Do not over-claim blending.
+
         Return JSON only, matching the schema exactly.
 
         Global count-shift context:
@@ -1006,11 +1110,22 @@ def build_abstract_prompt(
     report_context: dict[str, Any],
 ) -> str:
     count_shift_summary = build_count_shift_summary(report_context)
+    is_full_corpus_run = bool(report_context.get("is_full_corpus_run", False))
+    method_scope = (
+        "same embeddings for the full corpus, separate pre/post cluster discovery, approximate post-to-pre matching"
+        if is_full_corpus_run
+        else "same embeddings for the clustered rows, separate pre/post cluster discovery, approximate post-to-pre matching"
+    )
+    count_gap_guidance = (
+        "This run clusters the full corpus rather than a balanced sample, so the result is no longer subject to sampling variance, but modest pre/post corpus-volume differences can still matter and should be discussed."
+        if is_full_corpus_run
+        else "Balanced sampling removes raw row-count imbalance, but denser post language remains a possible explanation and should be discussed."
+    )
     payload = {
         "analysis_context": {
             "corpus": "U.S. defense-sector SEC 10-K Item 1A risk factor disclosures",
             "comparison": "2018-2021 versus 2022-2025",
-            "method": "same embeddings for all rows, separate pre/post cluster discovery, approximate post-to-pre matching",
+            "method": method_scope,
             "embedding_model": metadata.get("model_name", ""),
         },
         "count_shift_summary": count_shift_summary,
@@ -1018,6 +1133,7 @@ def build_abstract_prompt(
         "cluster_packages": cluster_packages,
         "cluster_analyses": cluster_analyses,
     }
+    new_post_only_count = int(count_shift_summary.get("new_post_only_count", 0))
     return textwrap.dedent(
         f"""
         You are writing the executive abstract for an exploratory report on defense-sector SEC 10-K Item 1A risk disclosures.
@@ -1033,11 +1149,37 @@ def build_abstract_prompt(
         - Treat "same cluster, shifted contents" as a real result category when the cluster family appears stable but the post examples show a changed center of gravity or more explicit disclosure emphasis.
         - The report's first result is the cluster count shift itself: {count_shift_summary['pre_clusters']} pre-2022 clusters versus {count_shift_summary['post_clusters']} post-2022 clusters.
         - You must explicitly assess whether that count gap looks more like thematic differentiation, genuinely new themes, or denser/more explicit post disclosure language.
-        - Balanced sampling removes raw row-count imbalance, but denser post language remains a possible explanation and should be discussed.
+        - {count_gap_guidance}
         - The abstract should synthesize the major findings across the interesting changed clusters, not repeat every detail.
         - If the strongest evidence points to genuinely emergent post-2022 themes, lead with those before the split/refined or merged cases.
         - Mention limitations explicitly.
         - Fill `primary_result` with a concise statement that leads with the cluster count difference and your best interpretation of what it means.
+
+        Non-fabrication rule:
+        - Every claim must be grounded in the supplied `cluster_packages`, `cluster_analyses`, or `count_shift_summary`.
+        - Do not invent events, firms, dates, or regulatory actions that are not present in those inputs.
+
+        Required: `boilerplate_envelope_finding`
+        - This run flagged {new_post_only_count} cluster(s) as clean `new_post_only` under the narration filters.
+        - If that count is zero or low and the dominant change category is split/refined or same-cluster-shifted-contents, write one or two sentences stating that the post period shows no genuinely detached new themes and that observable change is absorbed into the existing disclosure families as splitting, refinement, or denser wording. Frame this as a finding about the genre of risk disclosures, not a failure of the method.
+        - If genuinely new themes are present and well-supported, instead briefly describe what they are and why they look novel rather than refined.
+        - Do not repeat numbers already in `primary_result`; speak to what the pattern means.
+
+        Required: `layer_asymmetries`
+        - Scan `cluster_packages[*].prime_share` and `supplier_share` alongside the per-cluster `layer_reading` entries in `cluster_analyses`.
+        - List up to 3 concise sentences describing the clearest prime-versus-supplier asymmetries you can ground in those fields. For example, which theme looks supplier-heavy and which looks prime-heavy, and what that implies for the reading of the post-2022 shift.
+        - If there is no clear asymmetry across the narrated clusters, return an empty list. Do not fabricate an asymmetry.
+
+        Required: `intra_cluster_churn_caveat`
+        - Aggregate the per-cluster `intra_cluster_churn_note` fields.
+        - Write one or two sentences explaining that embedding-based cluster identity cannot by itself reveal churn inside a cluster: a cluster that stays geometrically stable can still have its internal content reshape substantially across periods.
+        - If the per-cluster evidence suggests this happened in several narrated clusters (for example, supply-chain language adding semiconductors and critical minerals, or cyber language absorbing ransomware, AI-driven threats, and the SEC cyber disclosure rule), name that briefly.
+        - Use this field to make intra-cluster churn a live interpretive category alongside the count-gap reading.
+
+        Required: `limitations`
+        - Must include an explicit limitation about this being disclosure analysis rather than incidence measurement.
+        - Must include at least one limitation about the alternative "denser disclosure language" explanation for apparent thematic differentiation.
+        - May include limitations about approximate matching, concentration effects, or LLM non-determinism when grounded in the inputs.
 
         Return JSON only, matching the schema exactly.
 
@@ -1093,7 +1235,7 @@ def build_report_context(
         word_stats_records.append(
             {
                 "period_bucket": row["period_bucket"],
-                "sample_rows": int(row["count"]),
+                "clustered_rows": int(row["count"]),
                 "mean_words": float(row["mean"]),
                 "median_words": float(row["median"]),
             }
@@ -1119,9 +1261,12 @@ def build_report_context(
     broad_match_counts = broad_post_catalog["match_type"].value_counts().to_dict() if not broad_post_catalog.empty else {}
     pre_cluster_count = int((pre_summary["period_cluster"] != -1).sum())
     post_cluster_count = int((post_summary["period_cluster"] != -1).sum())
+    is_full_corpus_run = int(len(sampled_df)) == int(len(full_df))
 
     return {
         "full_rows": int(len(full_df)),
+        "clustered_rows": int(len(sampled_df)),
+        "is_full_corpus_run": is_full_corpus_run,
         "companies": int(full_df["ticker"].nunique()),
         "pre_cluster_count": pre_cluster_count,
         "post_cluster_count": post_cluster_count,
@@ -1130,7 +1275,7 @@ def build_report_context(
         "emergent_cluster_count": int((interesting_df["match_type"] == EMERGENT_MATCH_TYPE).sum()) if not interesting_df.empty else 0,
         "interesting_cluster_rows": interesting_rows,
         "emergent_cluster_rows": [row for row in interesting_rows if row.get("match_type") == EMERGENT_MATCH_TYPE],
-        "sampled_word_stats": word_stats_records,
+        "clustered_word_stats": word_stats_records,
         "non_noise_post_match_type_counts": non_noise_match_counts,
         "broad_post_match_type_counts": broad_match_counts,
         "broad_pre_cluster_count": int(((pre_summary["period_cluster"] != -1) & (pre_summary["eligible_period_theme"])).sum()),
@@ -1161,7 +1306,8 @@ def build_count_shift_summary(report_context: dict[str, Any]) -> dict[str, Any]:
     gap = int(report_context.get("cluster_count_gap", 0))
     broad_pre_clusters = int(report_context.get("broad_pre_cluster_count", 0))
     broad_post_clusters = int(report_context.get("broad_post_cluster_count", 0))
-    word_stats = {row["period_bucket"]: row for row in report_context.get("sampled_word_stats", [])}
+    is_full_corpus_run = bool(report_context.get("is_full_corpus_run", False))
+    word_stats = {row["period_bucket"]: row for row in report_context.get("clustered_word_stats", [])}
     pre_words = word_stats.get(PRE_PERIOD, {})
     post_words = word_stats.get(POST_PERIOD, {})
     match_counts = report_context.get("non_noise_post_match_type_counts", {})
@@ -1169,24 +1315,20 @@ def build_count_shift_summary(report_context: dict[str, Any]) -> dict[str, Any]:
     merged_count = int(match_counts.get("merged", 0))
     persistent_count = int(match_counts.get("persistent", 0))
     new_count = int(match_counts.get("new_post_only", 0))
-    direction = "more" if gap > 0 else "fewer" if gap < 0 else "the same number of"
-    headline_note = (
-        f"Balanced clustering yields {pre_clusters} pre-2022 versus {post_clusters} post-2022 non-noise clusters, "
-        f"so the post period resolves into {abs(gap)} {direction if gap != 0 else direction} clusters."
-    )
+    run_scope = "Full-corpus clustering" if is_full_corpus_run else "Balanced clustering"
     if gap > 0:
         headline_note = (
-            f"Balanced clustering yields {pre_clusters} pre-2022 versus {post_clusters} post-2022 non-noise clusters, "
+            f"{run_scope} yields {pre_clusters} pre-2022 versus {post_clusters} post-2022 non-noise clusters, "
             f"so the post period resolves into {gap} more clusters."
         )
     elif gap < 0:
         headline_note = (
-            f"Balanced clustering yields {pre_clusters} pre-2022 versus {post_clusters} post-2022 non-noise clusters, "
+            f"{run_scope} yields {pre_clusters} pre-2022 versus {post_clusters} post-2022 non-noise clusters, "
             f"so the post period resolves into {abs(gap)} fewer clusters."
         )
     else:
         headline_note = (
-            f"Balanced clustering yields {pre_clusters} pre-2022 versus {post_clusters} post-2022 non-noise clusters, "
+            f"{run_scope} yields {pre_clusters} pre-2022 versus {post_clusters} post-2022 non-noise clusters, "
             "so the two periods resolve into the same number of clusters."
         )
     decomposition_note = (
@@ -1197,17 +1339,28 @@ def build_count_shift_summary(report_context: dict[str, Any]) -> dict[str, Any]:
         f"Among the broader clusters that clear the theme screen, counts move from {broad_pre_clusters} pre to "
         f"{broad_post_clusters} post, so the gap is not only being created by tiny fringe fragments."
     )
-    volume_note = (
-        f"Because the per-period sample size is balanced, the count gap is not a raw row-count artifact. "
-        f"Sampled row length is {pre_words.get('mean_words', 0.0):.1f} vs {post_words.get('mean_words', 0.0):.1f} mean words "
-        f"and {pre_words.get('median_words', 0.0):.1f} vs {post_words.get('median_words', 0.0):.1f} median words "
-        f"(pre vs post), so denser post disclosure language remains a live alternative explanation alongside genuine thematic differentiation."
-    )
+    if is_full_corpus_run:
+        volume_note = (
+            "Because this run clusters the full corpus rather than a balanced sample, the results are no longer subject "
+            "to sampling variance, but they may still reflect the modest difference in pre/post corpus volume. "
+            f"Clustered row length is {pre_words.get('mean_words', 0.0):.1f} vs {post_words.get('mean_words', 0.0):.1f} mean words "
+            f"and {pre_words.get('median_words', 0.0):.1f} vs {post_words.get('median_words', 0.0):.1f} median words "
+            "(pre vs post), so denser post disclosure language remains a live alternative explanation alongside genuine thematic differentiation."
+        )
+    else:
+        volume_note = (
+            "Because the per-period sample size is balanced, the count gap is not a raw row-count artifact. "
+            f"Clustered row length is {pre_words.get('mean_words', 0.0):.1f} vs {post_words.get('mean_words', 0.0):.1f} mean words "
+            f"and {pre_words.get('median_words', 0.0):.1f} vs {post_words.get('median_words', 0.0):.1f} median words "
+            "(pre vs post), so denser post disclosure language remains a live alternative explanation alongside genuine thematic differentiation."
+        )
     return {
         "headline_note": headline_note,
         "decomposition_note": decomposition_note,
         "broad_note": broad_note,
         "volume_note": volume_note,
+        "is_full_corpus_run": is_full_corpus_run,
+        "run_scope": run_scope,
         "pre_clusters": pre_clusters,
         "post_clusters": post_clusters,
         "cluster_gap": gap,
@@ -1281,6 +1434,11 @@ def run_cluster_analysis(
                 "continuity_note": "Continuity judgment unavailable because Gemini was skipped for this run.",
                 "count_gap_role": "unclear",
                 "count_gap_note": "Cluster-count role unavailable because Gemini was skipped for this run.",
+                "layer_reading": "Layer reading unavailable because Gemini was skipped for this run.",
+                "concentration_note": "Concentration reading unavailable because Gemini was skipped for this run.",
+                "temporal_reading_post": "Temporal reading unavailable because Gemini was skipped for this run.",
+                "intra_cluster_churn_note": "Intra-cluster churn reading unavailable because Gemini was skipped for this run.",
+                "category_blending_note": "Category-blending reading unavailable because Gemini was skipped for this run.",
                 "evidence_points": [
                     "Central examples capture the cluster core.",
                     "Peripheral examples test whether the theme remains coherent away from the centroid.",
@@ -1331,16 +1489,17 @@ def run_abstract_analysis(
                 and payload
                 and int(payload.get("_prompt_version", -1)) == ABSTRACT_PROMPT_VERSION
             ):
-                return payload
+                return normalize_abstract(payload)
         except Exception:
             pass
 
     if skip_llm:
-        abstract = {
-            "_prompt_version": ABSTRACT_PROMPT_VERSION,
+        abstract = normalize_abstract({
             "report_title": "LLM abstract skipped",
             "primary_result": "The cluster-count shift was not interpreted because Gemini was skipped for this run.",
             "abstract": "The evidence package was built successfully, but Gemini was not called because --skip-llm was used.",
+            "boilerplate_envelope_finding": "Boilerplate-envelope reading unavailable because Gemini was skipped for this run.",
+            "layer_asymmetries": [],
             "major_findings": [
                 "Interesting post clusters were selected from the period-shift artifacts.",
                 "Each selected cluster includes centroid-near and moderately peripheral evidence.",
@@ -1350,8 +1509,9 @@ def run_abstract_analysis(
                 "No model-written interpretation is included.",
                 "This summary is a placeholder rather than an analytical abstract.",
             ],
+            "intra_cluster_churn_caveat": "Intra-cluster churn caveat unavailable because Gemini was skipped for this run.",
             "closing_caution": "Run without --skip-llm to generate the actual narrative synthesis.",
-        }
+        })
         write_json(output_path, abstract)
         return abstract
 
@@ -1363,6 +1523,7 @@ def run_abstract_analysis(
         schema=gemini_json_schema_abstract(),
         temperature=temperature,
     )
+    abstract = normalize_abstract(abstract)
     abstract["_prompt_version"] = ABSTRACT_PROMPT_VERSION
     write_json(output_path, abstract)
     return abstract
@@ -1415,8 +1576,8 @@ def period_text_density_figure(sampled_df: pd.DataFrame, template_name: str) -> 
         y="word_count",
         color="period_title",
         template=template_name,
-        title="Sampled row length by period",
-        labels={"period_title": "Period", "word_count": "Words per sampled row"},
+        title="Clustered row length by period",
+        labels={"period_title": "Period", "word_count": "Words per clustered row"},
         color_discrete_map={
             PERIOD_META[PRE_PERIOD]["title"]: "#3e6c8f",
             PERIOD_META[POST_PERIOD]["title"]: "#c56b3c",
@@ -1443,7 +1604,7 @@ def interesting_cluster_figure(interesting_df: pd.DataFrame, template_name: str)
         color="match_type",
         template=template_name,
         title="Narrated post-2022 clusters across discovery types",
-        labels={"period_share": "Share of sampled post rows", "period_cluster_label": "Post cluster", "match_type": "Match type"},
+        labels={"period_share": "Share of clustered post rows", "period_cluster_label": "Post cluster", "match_type": "Match type"},
         hover_data={"best_pre_cluster_label": True, "best_pre_similarity": ":.2f", "top_terms": True},
         color_discrete_map={
             "new_post_only": "#0f4c5c",
@@ -1524,6 +1685,11 @@ def build_cluster_cards(
                 "best_pre_top_terms": package["best_pre_top_terms"],
                 "shared_terms": package["shared_terms"],
                 "top_tickers": package["top_tickers"],
+                "top_ticker_share": package.get("top_ticker_share", 0.0),
+                "top_ticker_n": package.get("top_ticker_n", 0),
+                "prime_share": package.get("prime_share", 0.0),
+                "supplier_share": package.get("supplier_share", 0.0),
+                "post_year_distribution": package.get("post_year_distribution", {}),
                 "central_post_examples": package["central_post_examples"],
                 "mid_post_examples": package["mid_post_examples"],
                 "peripheral_post_examples": package["peripheral_post_examples"],
@@ -1616,7 +1782,7 @@ def emergent_cluster_figure(cluster_cards: list[dict[str, Any]], template_name: 
         template=template_name,
         title="Emergent themes after combining geometry and LLM judgment",
         labels={
-            "period_share": "Share of sampled post rows",
+            "period_share": "Share of clustered post rows",
             "period_cluster_label": "Emergent post cluster",
             "ticker_count": "Ticker count",
         },
@@ -1667,7 +1833,7 @@ def content_shift_cluster_figure(cluster_cards: list[dict[str, Any]], template_n
         template=template_name,
         title="Stable cluster families with shifted post-2022 contents",
         labels={
-            "period_share": "Share of sampled post rows",
+            "period_share": "Share of clustered post rows",
             "period_cluster_label": "Shifted-content cluster",
             "best_pre_similarity": "Best pre cosine",
         },
@@ -1764,6 +1930,8 @@ def render_report(
     emergent_cards: list[dict[str, Any]],
     shifted_content_cards: list[dict[str, Any]],
     comparison_cards: list[dict[str, Any]],
+    is_full_corpus_run: bool,
+    source_dataset: str,
 ) -> str:
     template_path = Path(args.template)
     env = Environment(
@@ -1788,7 +1956,8 @@ def render_report(
         shifted_content_cards=shifted_content_cards,
         comparison_cards=comparison_cards,
         model_name=args.model_name or os.getenv("GEMINI_MODEL", ""),
-        generated_from=str(Path(args.sampled_rows).as_posix()),
+        is_full_corpus_run=is_full_corpus_run,
+        source_dataset=source_dataset,
     )
 
 
@@ -1974,7 +2143,7 @@ def main() -> None:
         "match_types": ", ".join(interesting_match_types),
         "embedding_model": embedding_model_name,
         "llm_model": model_name or "skipped",
-        "sample_rows": f"{len(sampled_df):,}",
+        "clustered_rows": f"{len(sampled_df):,}",
         "companies": f"{full_df['ticker'].nunique():,}",
         "pre_clusters": f"{int((pre_summary_df['period_cluster'] != -1).sum())}",
         "post_clusters": f"{int((post_summary_df['period_cluster'] != -1).sum())}",
@@ -1995,6 +2164,8 @@ def main() -> None:
         emergent_cards=emergent_cards,
         shifted_content_cards=shifted_content_cards,
         comparison_cards=comparison_cards,
+        is_full_corpus_run=bool(report_context.get("is_full_corpus_run", False)),
+        source_dataset=str(dataset_path.as_posix()),
     )
     output_html.write_text(html, encoding="utf-8")
 

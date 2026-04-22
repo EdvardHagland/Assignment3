@@ -424,8 +424,8 @@
       <h1>{{ title }}</h1>
       <p class="subtitle">{{ subtitle }}</p>
       <div class="hero-meta">
-        <div class="metric"><div class="metric-label">Full corpus</div><div class="metric-value">{{ summary.full_rows }}</div></div>
-        <div class="metric"><div class="metric-label">Sample</div><div class="metric-value">{{ summary.sample_rows }}</div></div>
+        <div class="metric"><div class="metric-label">Full-corpus rows</div><div class="metric-value">{{ summary.full_rows }}</div></div>
+        <div class="metric"><div class="metric-label">Clustered rows</div><div class="metric-value">{{ summary.clustered_rows }}</div></div>
         <div class="metric"><div class="metric-label">Companies</div><div class="metric-value">{{ summary.companies }}</div></div>
         <div class="metric"><div class="metric-label">Pre clusters</div><div class="metric-value">{{ summary.pre_clusters }}</div></div>
         <div class="metric"><div class="metric-label">Post clusters</div><div class="metric-value">{{ summary.post_clusters }}</div></div>
@@ -442,18 +442,26 @@
       </div>
       <div class="method-strip">
         <div class="method-chip"><strong>Corpus</strong>SEC 10-K Item 1A risk disclosures across primes and suppliers.</div>
-        <div class="method-chip"><strong>Embedding</strong>{{ model_name }} embeds the sampled rows once, identically across both periods.</div>
+        <div class="method-chip"><strong>Embedding</strong>{{ model_name }} embeds the clustered rows once, identically across both periods.</div>
         <div class="method-chip"><strong>Discovery</strong>Pre-2022 and post-2022 rows are clustered separately with UMAP plus HDBSCAN.</div>
         <div class="method-chip"><strong>Matching</strong>Post clusters are matched back to pre clusters using centroid cosine similarity, top-term overlap, and close reading support.</div>
         <div class="method-chip"><strong>Interpretation</strong>Use this for thematic emergence and refinement, not literal one-to-one cluster identity claims.</div>
-        <div class="method-chip"><strong>Sample</strong>Up to {{ sample_per_period }} rows per period bucket.</div>
+        {% if is_full_corpus_run %}
+        <div class="method-chip"><strong>Coverage</strong>Full corpus in each period bucket.</div>
+        {% else %}
+        <div class="method-chip"><strong>Coverage</strong>Balanced cap of up to {{ sample_per_period }} rows per period bucket.</div>
+        {% endif %}
       </div>
     </section>
 
     <section class="section" id="corpus">
       <div class="section-header">
         <h2>Corpus structure</h2>
-        <p>The descriptive base is still the full corpus. The clustering pass uses a balanced sample so the larger post period does not automatically dominate the geometry.</p>
+        {% if is_full_corpus_run %}
+        <p>The descriptive base and the clustering base are the same full corpus. Because this run clusters the full corpus rather than a balanced sample, the results are no longer subject to sampling variance, but they may reflect the modest difference in pre/post corpus volume.</p>
+        {% else %}
+        <p>The descriptive base is still the full corpus, but the clustering pass uses a balanced subset so the larger post period does not automatically dominate the geometry.</p>
+        {% endif %}
       </div>
       <div class="grid-2">
         <div class="figure-card">
@@ -461,7 +469,11 @@
           {{ figures.corpus_overview | safe }}
         </div>
         <div class="figure-card">
-          <p class="figure-note">The balanced sample the embedding and clustering workflow actually sees.</p>
+          {% if is_full_corpus_run %}
+          <p class="figure-note">The full clustered corpus the embedding and clustering workflow actually sees.</p>
+          {% else %}
+          <p class="figure-note">The balanced clustered subset the embedding and clustering workflow actually sees.</p>
+          {% endif %}
           {{ figures.sample_mix | safe }}
         </div>
       </div>
@@ -601,7 +613,7 @@
     </section>
 
     <p class="footer">
-      Generated from <code>{{ generated_from }}</code><br>
+      Source dataset <code>{{ source_dataset }}</code><br>
       Exploratory: use this to understand how the thematic structure changed, then pair it with filing-level contrastive analysis for the final argument.
     </p>
   </div>

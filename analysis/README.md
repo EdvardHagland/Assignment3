@@ -8,6 +8,8 @@ Current starter files:
   - copy-paste Google Colab blocks for loading the corpus, optionally regenerating it, and rendering the maintained period-shift clustering report
 - [requirements-colab.txt](/C:/Users/edvar/Assignment3/analysis/requirements-colab.txt)
   - dependency list for the maintained Colab analysis and report workflow
+- [METHODOLOGICAL_CRITIQUE.md](/C:/Users/edvar/Assignment3/analysis/METHODOLOGICAL_CRITIQUE.md)
+  - honest self-assessment of what the embedding + LLM pipeline sees and what it structurally cannot see (intra-cluster churn, post-period temporal dynamics, concentration, category blending, HDBSCAN sensitivity, genre-versus-reality)
 - [exploratory_clustering/README.md](/C:/Users/edvar/Assignment3/analysis/exploratory_clustering/README.md)
   - the exploratory clustering workflow for separate pre/post discovery and approximate cluster matching
 

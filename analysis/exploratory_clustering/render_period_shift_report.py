@@ -4,8 +4,8 @@ Render an exploratory report with shared embeddings and separate pre/post
 cluster discovery.
 
 The workflow is:
-1. sample once from each period
-2. embed all sampled rows once with the same model
+1. choose the rows to cluster from each period (balanced subset or full corpus)
+2. embed all clustered rows once with the same model
 3. cluster pre-2022 and post-2022 rows separately
 4. summarize each cluster with terms, examples, company breadth, and filing breadth
 5. match post clusters back to the pre system approximately
@@ -912,8 +912,8 @@ def sample_mix_figure(sampled_df: pd.DataFrame, template_name: str) -> go.Figure
         color="company_layer",
         barmode="group",
         template=template_name,
-        title="Balanced exploratory sample by period and layer",
-        labels={"period_bucket": "Period bucket", "n": "Sample rows", "company_layer": "Company layer"},
+        title="Clustered rows by period and layer",
+        labels={"period_bucket": "Period bucket", "n": "Clustered rows", "company_layer": "Company layer"},
     )
     fig.update_layout(height=420)
     return fig
@@ -921,7 +921,7 @@ def sample_mix_figure(sampled_df: pd.DataFrame, template_name: str) -> go.Figure
 
 def shared_umap_period_figure(display_df: pd.DataFrame, template_name: str) -> go.Figure:
     if display_df.empty:
-        return empty_figure("No sampled rows were available for the shared embedding projection.", template_name, height=540)
+        return empty_figure("No clustered rows were available for the shared embedding projection.", template_name, height=540)
     fig = px.scatter(
         display_df,
         x="global_umap_x",
@@ -949,7 +949,7 @@ def shared_umap_period_figure(display_df: pd.DataFrame, template_name: str) -> g
 
 def period_cluster_space_figure(display_df: pd.DataFrame, period: str, template_name: str) -> go.Figure:
     if display_df.empty:
-        return empty_figure(f"No sampled rows were available for {PERIOD_META[period]['title']} clustering.", template_name, height=540)
+        return empty_figure(f"No clustered rows were available for {PERIOD_META[period]['title']} clustering.", template_name, height=540)
     fig = px.scatter(
         display_df,
         x="period_umap_x",
@@ -988,7 +988,7 @@ def period_cluster_share_figure(summary_df: pd.DataFrame, period: str, top_clust
         template=template_name,
         title=f"{PERIOD_META[period]['title']} cluster shares inside their own period",
         labels={
-            "period_share": "Share of sampled rows within period",
+            "period_share": "Share of clustered rows within period",
             "period_cluster_label": "Cluster",
             "eligible_period_theme": "Broad theme",
         },
@@ -1060,7 +1060,7 @@ def post_match_status_figure(post_catalog_df: pd.DataFrame, top_clusters: int, t
         color="match_type",
         template=template_name,
         title="How the highlighted post clusters map back to the pre system",
-        labels={"period_share": "Share of sampled post rows", "period_cluster_label": "Post cluster", "match_type": "Match type"},
+        labels={"period_share": "Share of clustered post rows", "period_cluster_label": "Post cluster", "match_type": "Match type"},
         hover_data={
             "best_pre_cluster_label": True,
             "best_pre_similarity": ":.2f",
@@ -1106,7 +1106,7 @@ def build_pdf_report(output_pdf: Path, title: str, summary_metrics: Dict[str, st
 
     story = [Paragraph(title, title_style), Spacer(1, 0.1 * inch)]
     metric_rows = [
-        ["Full corpus rows", summary_metrics["full_rows"], "Sample rows", summary_metrics["sample_rows"]],
+        ["Full-corpus rows", summary_metrics["full_rows"], "Clustered rows", summary_metrics["clustered_rows"]],
         ["Pre clusters", summary_metrics["pre_clusters"], "Post clusters", summary_metrics["post_clusters"]],
         ["Matched post", summary_metrics["matched_post_clusters"], "New post-only", summary_metrics["new_post_clusters"]],
         ["Noise share", summary_metrics["noise_share"], "Embedding model", summary_metrics["model_name"]],
@@ -1138,6 +1138,7 @@ def render_report(
     highlighted_post_cards: List[dict],
     all_post_cards: List[dict],
     match_rows: List[dict],
+    is_full_corpus_run: bool,
 ) -> str:
     template_path = Path(args.template)
     env = Environment(
@@ -1160,7 +1161,8 @@ def render_report(
         sample_per_period=args.sample_per_period,
         match_threshold=args.match_threshold,
         new_cluster_threshold=args.new_cluster_threshold,
-        generated_from=str(Path(args.dataset).as_posix()),
+        is_full_corpus_run=is_full_corpus_run,
+        source_dataset=str(Path(args.dataset).as_posix()),
     )
 
 
@@ -1223,10 +1225,11 @@ def main() -> None:
         "post_match_status": post_match_status_figure(post_catalog_df, args.top_clusters, template_name),
     }
     figures = {key: render_plot(fig) for key, fig in figure_objects.items()}
+    is_full_corpus_run = len(sampled_clustered_df) == len(full_df)
 
     summary_metrics = {
         "full_rows": f"{len(full_df):,}",
-        "sample_rows": f"{len(sampled_clustered_df):,}",
+        "clustered_rows": f"{len(sampled_clustered_df):,}",
         "display_rows": f"{len(global_display_df):,}",
         "companies": f"{full_df['ticker'].nunique():,}",
         "pre_clusters": f"{int((pre_discovery.summary_df['period_cluster'] != -1).sum())}",
@@ -1264,6 +1267,7 @@ def main() -> None:
         highlighted_post_cards=highlighted_post_cards,
         all_post_cards=all_post_cards,
         match_rows=match_rows,
+        is_full_corpus_run=is_full_corpus_run,
     )
     output_html.write_text(html_report, encoding="utf-8")
 
