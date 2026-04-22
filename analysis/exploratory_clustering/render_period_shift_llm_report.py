@@ -123,19 +123,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--central-examples",
         type=int,
-        default=2,
+        default=4,
         help="How many centroid-near post examples to package per cluster.",
+    )
+    parser.add_argument(
+        "--mid-examples",
+        type=int,
+        default=4,
+        help="How many mid-distance post examples to package per cluster.",
     )
     parser.add_argument(
         "--peripheral-examples",
         type=int,
-        default=2,
+        default=4,
         help="How many moderately peripheral post examples to package per cluster.",
     )
     parser.add_argument(
         "--matched-pre-examples",
         type=int,
-        default=2,
+        default=3,
         help="How many matched pre-cluster examples to package per cluster.",
     )
     parser.add_argument(
@@ -263,12 +269,6 @@ def select_interesting_post_clusters(
         & (merged["match_type"].isin(interesting_match_types))
     ].copy()
 
-    if interesting.empty:
-        interesting = merged[
-            (merged["period_cluster"] != -1)
-            & (merged["match_type"].isin(interesting_match_types))
-        ].copy()
-
     interesting = interesting.sort_values(
         ["match_priority", "period_share", "cluster_size", "best_pre_similarity"],
         ascending=[True, False, False, False],
@@ -331,7 +331,13 @@ def compute_cluster_distance_frame(
     return focus_df
 
 
-def choose_peripheral_examples(cluster_df: pd.DataFrame, excluded_ids: set[str], n: int) -> pd.DataFrame:
+def choose_examples_in_band(
+    cluster_df: pd.DataFrame,
+    excluded_ids: set[str],
+    n: int,
+    start_percentile: float,
+    end_percentile: float,
+) -> pd.DataFrame:
     if cluster_df.empty or n <= 0:
         return cluster_df.head(0)
 
@@ -340,7 +346,7 @@ def choose_peripheral_examples(cluster_df: pd.DataFrame, excluded_ids: set[str],
         return candidates
 
     candidates = candidates.sort_values("distance_percentile").reset_index(drop=True)
-    positions = np.linspace(0.68, 0.86, num=min(n, len(candidates)))
+    positions = np.linspace(start_percentile, end_percentile, num=min(n, len(candidates)))
     chosen_indices: list[int] = []
     for position in positions:
         idx = int(round(position * (len(candidates) - 1)))
@@ -357,6 +363,14 @@ def choose_peripheral_examples(cluster_df: pd.DataFrame, excluded_ids: set[str],
             break
 
     return candidates.iloc[sorted(chosen_indices)].copy()
+
+
+def choose_mid_examples(cluster_df: pd.DataFrame, excluded_ids: set[str], n: int) -> pd.DataFrame:
+    return choose_examples_in_band(cluster_df, excluded_ids, n, start_percentile=0.28, end_percentile=0.58)
+
+
+def choose_peripheral_examples(cluster_df: pd.DataFrame, excluded_ids: set[str], n: int) -> pd.DataFrame:
+    return choose_examples_in_band(cluster_df, excluded_ids, n, start_percentile=0.68, end_percentile=0.90)
 
 
 def format_example_rows(rows_df: pd.DataFrame, label_prefix: str) -> list[dict[str, Any]]:
@@ -393,7 +407,9 @@ def build_cluster_evidence_package(
 
     central_post_rows = representative_df[representative_df["cluster_label"] == post_label].sort_values("rank").head(args.central_examples).copy()
     central_post_ids = set(central_post_rows["annotation_id"].astype(str))
-    peripheral_post_rows = choose_peripheral_examples(post_cluster_rows, central_post_ids, args.peripheral_examples)
+    mid_post_rows = choose_mid_examples(post_cluster_rows, central_post_ids, args.mid_examples)
+    excluded_after_mid = central_post_ids.union(set(mid_post_rows["annotation_id"].astype(str)))
+    peripheral_post_rows = choose_peripheral_examples(post_cluster_rows, excluded_after_mid, args.peripheral_examples)
 
     pre_rows = representative_df[representative_df["cluster_label"] == pre_label].sort_values("rank").head(args.matched_pre_examples).copy()
     if pre_rows.empty and not pre_cluster_rows.empty:
@@ -417,6 +433,7 @@ def build_cluster_evidence_package(
         "shared_terms": str(cluster_row.get("shared_terms", "")),
         "top_pre_candidates": str(cluster_row.get("top_pre_candidates", "")),
         "central_post_examples": format_example_rows(central_post_rows, f"{post_label}_core"),
+        "mid_post_examples": format_example_rows(mid_post_rows, f"{post_label}_mid"),
         "peripheral_post_examples": format_example_rows(peripheral_post_rows, f"{post_label}_edge"),
         "matched_pre_examples": format_example_rows(pre_rows, f"{pre_label or 'pre'}_match"),
     }
@@ -588,7 +605,8 @@ def build_cluster_prompt(cluster_package: dict[str, Any]) -> str:
         - Analyze one interesting post-2022 cluster and its best pre-2022 comparison context.
         - Focus on why this cluster was flagged as interesting.
         - Use the central examples to understand the core of the cluster.
-        - Use the peripheral examples to test how broad the cluster still is away from the centroid.
+        - Use the mid-distance examples to see whether the theme still holds once you move away from the centroid.
+        - Use the peripheral examples to test how broad the cluster still is near its outer edge.
         - Use the matched pre examples to judge whether this is genuinely new, more specific, or simply a renamed variant of an earlier theme.
         - Be critical and restrained. If the evidence is weak or mixed, say so.
 
@@ -604,6 +622,7 @@ def build_abstract_prompt(
     cluster_packages: list[dict[str, Any]],
     cluster_analyses: list[dict[str, Any]],
     metadata: dict[str, Any],
+    report_context: dict[str, Any],
 ) -> str:
     payload = {
         "analysis_context": {
@@ -612,6 +631,7 @@ def build_abstract_prompt(
             "method": "same embeddings for all rows, separate pre/post cluster discovery, approximate post-to-pre matching",
             "embedding_model": metadata.get("model_name", ""),
         },
+        "report_context": report_context,
         "cluster_packages": cluster_packages,
         "cluster_analyses": cluster_analyses,
     }
@@ -634,6 +654,51 @@ def build_abstract_prompt(
         {json.dumps(payload, indent=2, ensure_ascii=False)}
         """
     ).strip()
+
+
+def build_report_context(
+    full_df: pd.DataFrame,
+    summary_df: pd.DataFrame,
+    interesting_df: pd.DataFrame,
+    matches_df: pd.DataFrame,
+) -> dict[str, Any]:
+    pre_summary = summary_df[summary_df["period_bucket"] == PRE_PERIOD].copy()
+    post_summary = summary_df[summary_df["period_bucket"] == POST_PERIOD].copy()
+
+    def compact_rows(df: pd.DataFrame, columns: list[str], n: int = 8) -> list[dict[str, Any]]:
+        if df.empty:
+            return []
+        subset = df.sort_values(["period_share", "cluster_size"], ascending=[False, False]).head(n).copy()
+        return subset[columns].to_dict(orient="records")
+
+    interesting_rows = []
+    if not interesting_df.empty:
+        interesting_rows = interesting_df[
+            [
+                "period_cluster_label",
+                "match_type",
+                "match_label",
+                "period_share",
+                "cluster_size",
+                "ticker_count",
+                "filing_count",
+                "top_terms",
+                "best_pre_cluster_label",
+                "best_pre_similarity",
+            ]
+        ].to_dict(orient="records")
+
+    return {
+        "full_rows": int(len(full_df)),
+        "companies": int(full_df["ticker"].nunique()),
+        "pre_cluster_count": int((pre_summary["period_cluster"] != -1).sum()),
+        "post_cluster_count": int((post_summary["period_cluster"] != -1).sum()),
+        "interesting_cluster_count": int(len(interesting_df)),
+        "interesting_cluster_rows": interesting_rows,
+        "top_pre_clusters": compact_rows(pre_summary, ["period_cluster_label", "period_share", "cluster_size", "ticker_count", "filing_count", "top_terms"]),
+        "top_post_clusters": compact_rows(post_summary, ["period_cluster_label", "period_share", "cluster_size", "ticker_count", "filing_count", "top_terms"]),
+        "match_type_counts": matches_df["match_type"].fillna("missing").value_counts().to_dict() if not matches_df.empty else {},
+    }
 
 
 def run_cluster_analysis(
@@ -681,6 +746,7 @@ def run_abstract_analysis(
     cluster_packages: list[dict[str, Any]],
     cluster_analyses: list[dict[str, Any]],
     metadata: dict[str, Any],
+    report_context: dict[str, Any],
     api_key: str,
     model_name: str,
     temperature: float,
@@ -702,7 +768,7 @@ def run_abstract_analysis(
             "closing_caution": "Run without --skip-llm to generate the actual narrative synthesis.",
         }
 
-    prompt = build_abstract_prompt(cluster_packages, cluster_analyses, metadata)
+    prompt = build_abstract_prompt(cluster_packages, cluster_analyses, metadata, report_context)
     return call_gemini_json(
         api_key=api_key,
         model_name=model_name,
@@ -797,6 +863,7 @@ def build_cluster_cards(
                 "shared_terms": package["shared_terms"],
                 "top_tickers": package["top_tickers"],
                 "central_post_examples": package["central_post_examples"],
+                "mid_post_examples": package["mid_post_examples"],
                 "peripheral_post_examples": package["peripheral_post_examples"],
                 "matched_pre_examples": package["matched_pre_examples"],
                 "analysis": analysis,
@@ -883,10 +950,17 @@ def main() -> None:
         temperature=args.temperature,
         skip_llm=args.skip_llm,
     )
+    report_context = build_report_context(
+        full_df=full_df,
+        summary_df=summary_df,
+        interesting_df=interesting_df,
+        matches_df=matches_df,
+    )
     abstract_data = run_abstract_analysis(
         cluster_packages=cluster_packages,
         cluster_analyses=cluster_analyses,
         metadata=metadata,
+        report_context=report_context,
         api_key=api_key,
         model_name=model_name,
         temperature=args.abstract_temperature,

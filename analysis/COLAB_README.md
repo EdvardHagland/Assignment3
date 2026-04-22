@@ -143,6 +143,12 @@ It does not send one giant prompt. It sends one structured request per interesti
 
 The final HTML is rendered after those Gemini calls finish, so the abstract and cluster writeups are integrated into the same report HTML together with the clustering figures.
 
+The selection is strict by default:
+
+- only post clusters already flagged as broad themes
+- only the match types you explicitly list in `--interesting-match-types`
+- no fallback to weaker clusters if nothing passes the filter
+
 ```python
 !python analysis/exploratory_clustering/render_period_shift_llm_report.py \
     --sampled-rows analysis/exploratory_clustering/output/sampled_cluster_rows.csv \
@@ -153,9 +159,10 @@ The final HTML is rendered after those Gemini calls finish, so the abstract and 
     --output-html analysis/exploratory_clustering/output/period_shift_llm_report.html \
     --interesting-match-types new_post_only,split/refined,merged \
     --max-clusters 6 \
-    --central-examples 2 \
-    --peripheral-examples 2 \
-    --matched-pre-examples 2
+    --central-examples 4 \
+    --mid-examples 4 \
+    --peripheral-examples 4 \
+    --matched-pre-examples 3
 ```
 
 This will write:

@@ -532,7 +532,7 @@
     <section class="section" id="clusters">
       <div class="section-header">
         <h2>Evidence-aware cluster cards</h2>
-        <p>Each card combines structured cluster metadata, Gemini’s critical interpretation, centroid-near evidence, moderately peripheral evidence, and matched pre-2022 comparison text where available.</p>
+        <p>Each card combines structured cluster metadata, Gemini’s critical interpretation, centroid-near evidence, mid-distance evidence, outer-edge evidence, and matched pre-2022 comparison text where available.</p>
       </div>
       <div class="clusters">
         {% for cluster in cluster_cards %}
@@ -577,6 +577,16 @@
               {% for example in cluster.central_post_examples %}
               <div class="example">
                 <div class="example-meta">{{ example.example_id }} · {{ example.ticker }} · {{ example.company_layer }} · {{ example.filing_year }}</div>
+                <p>{{ example.text_preview }}</p>
+              </div>
+              {% endfor %}
+            </div>
+
+            <div class="evidence-group">
+              <h5>Mid-distance post examples</h5>
+              {% for example in cluster.mid_post_examples %}
+              <div class="example">
+                <div class="example-meta">{{ example.example_id }} · {{ example.ticker }} · {{ example.company_layer }} · {{ example.filing_year }} · p={{ "%.2f"|format(example.distance_percentile) }}</div>
                 <p>{{ example.text_preview }}</p>
               </div>
               {% endfor %}
