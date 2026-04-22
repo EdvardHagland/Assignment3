@@ -538,7 +538,7 @@
     <section class="section" id="emergence">
       <div class="section-header">
         <h2>Emergent post-2022 themes</h2>
-        <p>Broad <code>new_post_only</code> clusters are treated here as discoveries in their own right. The first question is not which pre cluster they map back to, but what themes became newly explicit in post-2022 risk disclosure language.</p>
+        <p>Broad <code>new_post_only</code> clusters are treated here as discoveries in their own right. The first question is not which pre cluster they map back to, but what themes became newly explicit in post-2022 risk disclosure language. This screen is intentionally a bit looser than the structural-comparison filter, because emergent themes can be newer and somewhat narrower while still spanning multiple firms and filings.</p>
       </div>
       <div class="grid-2">
         <div class="figure-card">{{ figures.emergent_clusters | safe }}</div>
@@ -575,7 +575,7 @@
       </div>
       <div class="subsection-head">
         <h3>Emergent post-2022 discoveries</h3>
-        <p>These are the broad post clusters with no strong pre analogue under the current thresholds. They are treated as substantive discoveries unless the evidence suggests boilerplate drift or firm-specific artifacts.</p>
+        <p>These are the post clusters with no strong pre analogue that still clear the emergence breadth screen. They are treated as substantive discoveries unless the evidence suggests boilerplate drift or firm-specific artifacts.</p>
       </div>
       {% if emergent_cards %}
       <div class="clusters">
@@ -662,7 +662,7 @@
         {% endfor %}
       </div>
       {% else %}
-      <div class="empty-note">No narrated clusters were classified as broad post-only discoveries under the current filters.</div>
+      <div class="empty-note">No narrated clusters met the emergence screen, even after relaxing the breadth filter relative to the structural comparison cards.</div>
       {% endif %}
 
       <div class="subsection-head" style="margin-top:22px;">

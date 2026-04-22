@@ -65,6 +65,10 @@ FOCUS_MIN_CLUSTER_SIZE = 150
 FOCUS_MIN_TICKER_COUNT = 10
 FOCUS_MIN_FILING_COUNT = 10
 FOCUS_MAX_TOP_TICKER_SHARE = 0.35
+EMERGENT_MIN_CLUSTER_SIZE = 100
+EMERGENT_MIN_TICKER_COUNT = 6
+EMERGENT_MIN_FILING_COUNT = 6
+EMERGENT_MAX_TOP_TICKER_SHARE = 0.45
 
 
 @dataclass
@@ -177,6 +181,30 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=FOCUS_MIN_FILING_COUNT,
         help="Minimum filing count for a cluster to be treated as a broad theme.",
+    )
+    parser.add_argument(
+        "--emergent-min-cluster-size",
+        type=int,
+        default=EMERGENT_MIN_CLUSTER_SIZE,
+        help="Minimum cluster size for a post-only cluster to qualify as an emergent discovery candidate.",
+    )
+    parser.add_argument(
+        "--emergent-min-ticker-count",
+        type=int,
+        default=EMERGENT_MIN_TICKER_COUNT,
+        help="Minimum ticker breadth for a post-only cluster to qualify as an emergent discovery candidate.",
+    )
+    parser.add_argument(
+        "--emergent-min-filing-count",
+        type=int,
+        default=EMERGENT_MIN_FILING_COUNT,
+        help="Minimum filing breadth for a post-only cluster to qualify as an emergent discovery candidate.",
+    )
+    parser.add_argument(
+        "--emergent-max-top-ticker-share",
+        type=float,
+        default=EMERGENT_MAX_TOP_TICKER_SHARE,
+        help="Maximum top-ticker share for a post-only cluster to qualify as an emergent discovery candidate.",
     )
     parser.add_argument(
         "--output-pdf",
@@ -450,6 +478,10 @@ def build_period_cluster_summary(
     period: str,
     top_term_map: Dict[int, str],
     focus_min_filing_count: int,
+    emergent_min_cluster_size: int,
+    emergent_min_ticker_count: int,
+    emergent_min_filing_count: int,
+    emergent_max_top_ticker_share: float,
 ) -> pd.DataFrame:
     counts = (
         clustered_df.groupby(["period_cluster", "period_cluster_label"])
@@ -519,6 +551,13 @@ def build_period_cluster_summary(
         & (summary["filing_count"] >= focus_min_filing_count)
         & (summary["top_ticker_share"] <= FOCUS_MAX_TOP_TICKER_SHARE)
     )
+    summary["eligible_emergent_theme"] = (
+        (summary["period_cluster"] != -1)
+        & (summary["cluster_size"] >= emergent_min_cluster_size)
+        & (summary["ticker_count"] >= emergent_min_ticker_count)
+        & (summary["filing_count"] >= emergent_min_filing_count)
+        & (summary["top_ticker_share"] <= emergent_max_top_ticker_share)
+    )
     summary["exclusion_reason"] = ""
     summary.loc[summary["period_cluster"] == -1, "exclusion_reason"] = "noise"
     summary.loc[
@@ -538,6 +577,25 @@ def build_period_cluster_summary(
         "exclusion_reason",
     ] = "too_concentrated"
     summary.loc[summary["eligible_period_theme"], "exclusion_reason"] = ""
+    summary["emergent_exclusion_reason"] = ""
+    summary.loc[summary["period_cluster"] == -1, "emergent_exclusion_reason"] = "noise"
+    summary.loc[
+        (summary["period_cluster"] != -1) & (summary["cluster_size"] < emergent_min_cluster_size),
+        "emergent_exclusion_reason",
+    ] = "too_small_for_emergence"
+    summary.loc[
+        (summary["period_cluster"] != -1) & (summary["ticker_count"] < emergent_min_ticker_count),
+        "emergent_exclusion_reason",
+    ] = "too_few_tickers_for_emergence"
+    summary.loc[
+        (summary["period_cluster"] != -1) & (summary["filing_count"] < emergent_min_filing_count),
+        "emergent_exclusion_reason",
+    ] = "too_few_filings_for_emergence"
+    summary.loc[
+        (summary["period_cluster"] != -1) & (summary["top_ticker_share"] > emergent_max_top_ticker_share),
+        "emergent_exclusion_reason",
+    ] = "too_concentrated_for_emergence"
+    summary.loc[summary["eligible_emergent_theme"], "emergent_exclusion_reason"] = ""
     return summary.sort_values(
         ["eligible_period_theme", "period_share", "cluster_size"],
         ascending=[False, False, False],
@@ -578,6 +636,10 @@ def discover_period_clusters(
         period=period,
         top_term_map=top_term_map,
         focus_min_filing_count=args.focus_min_filing_count,
+        emergent_min_cluster_size=args.emergent_min_cluster_size,
+        emergent_min_ticker_count=args.emergent_min_ticker_count,
+        emergent_min_filing_count=args.emergent_min_filing_count,
+        emergent_max_top_ticker_share=args.emergent_max_top_ticker_share,
     )
     display_df = build_display_sample(
         period_df,
@@ -1214,6 +1276,14 @@ def main() -> None:
         "cluster_min_size": args.cluster_min_size,
         "match_threshold": args.match_threshold,
         "new_cluster_threshold": args.new_cluster_threshold,
+        "focus_min_cluster_size": FOCUS_MIN_CLUSTER_SIZE,
+        "focus_min_ticker_count": FOCUS_MIN_TICKER_COUNT,
+        "focus_min_filing_count": args.focus_min_filing_count,
+        "focus_max_top_ticker_share": FOCUS_MAX_TOP_TICKER_SHARE,
+        "emergent_min_cluster_size": args.emergent_min_cluster_size,
+        "emergent_min_ticker_count": args.emergent_min_ticker_count,
+        "emergent_min_filing_count": args.emergent_min_filing_count,
+        "emergent_max_top_ticker_share": args.emergent_max_top_ticker_share,
         "summary_metrics": summary_metrics,
         "pdf_error": "",
     }

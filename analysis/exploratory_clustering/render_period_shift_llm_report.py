@@ -29,6 +29,14 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from plotly.offline import get_plotlyjs
 
 from render_period_shift_report import (
+    EMERGENT_MAX_TOP_TICKER_SHARE,
+    EMERGENT_MIN_CLUSTER_SIZE,
+    EMERGENT_MIN_FILING_COUNT,
+    EMERGENT_MIN_TICKER_COUNT,
+    FOCUS_MAX_TOP_TICKER_SHARE,
+    FOCUS_MIN_CLUSTER_SIZE,
+    FOCUS_MIN_FILING_COUNT,
+    FOCUS_MIN_TICKER_COUNT,
     MATCH_TYPE_LABELS,
     MATCH_TYPE_PRIORITY,
     build_display_sample,
@@ -122,6 +130,30 @@ def parse_args() -> argparse.Namespace:
         "--interesting-match-types",
         default=",".join(DEFAULT_INTERESTING_MATCH_TYPES),
         help="Comma-separated post-cluster match types to narrate.",
+    )
+    parser.add_argument(
+        "--emergent-min-cluster-size",
+        type=int,
+        default=EMERGENT_MIN_CLUSTER_SIZE,
+        help="Minimum cluster size for a post-only cluster to qualify as an emergent discovery candidate.",
+    )
+    parser.add_argument(
+        "--emergent-min-ticker-count",
+        type=int,
+        default=EMERGENT_MIN_TICKER_COUNT,
+        help="Minimum ticker breadth for a post-only cluster to qualify as an emergent discovery candidate.",
+    )
+    parser.add_argument(
+        "--emergent-min-filing-count",
+        type=int,
+        default=EMERGENT_MIN_FILING_COUNT,
+        help="Minimum filing breadth for a post-only cluster to qualify as an emergent discovery candidate.",
+    )
+    parser.add_argument(
+        "--emergent-max-top-ticker-share",
+        type=float,
+        default=EMERGENT_MAX_TOP_TICKER_SHARE,
+        help="Maximum top-ticker share for a post-only cluster to qualify as an emergent discovery candidate.",
     )
     parser.add_argument(
         "--max-clusters",
@@ -279,13 +311,50 @@ def parse_match_types(value: str) -> list[str]:
     return [part.strip() for part in value.split(",") if part.strip()]
 
 
+def coerce_bool_series(series: pd.Series) -> pd.Series:
+    if series.empty:
+        return pd.Series(dtype=bool)
+    if pd.api.types.is_bool_dtype(series):
+        return series.fillna(False)
+    lowered = series.fillna("").astype(str).str.strip().str.lower()
+    return lowered.isin({"true", "1", "yes", "y"})
+
+
+def ensure_theme_flags(summary_df: pd.DataFrame, args: argparse.Namespace) -> pd.DataFrame:
+    summary = summary_df.copy()
+    if "eligible_period_theme" in summary.columns:
+        summary["eligible_period_theme"] = coerce_bool_series(summary["eligible_period_theme"])
+    else:
+        summary["eligible_period_theme"] = (
+            (summary["period_cluster"] != -1)
+            & (summary["cluster_size"] >= FOCUS_MIN_CLUSTER_SIZE)
+            & (summary["ticker_count"] >= FOCUS_MIN_TICKER_COUNT)
+            & (summary["filing_count"] >= FOCUS_MIN_FILING_COUNT)
+            & (summary["top_ticker_share"] <= FOCUS_MAX_TOP_TICKER_SHARE)
+        )
+
+    if "eligible_emergent_theme" in summary.columns:
+        summary["eligible_emergent_theme"] = coerce_bool_series(summary["eligible_emergent_theme"])
+    else:
+        summary["eligible_emergent_theme"] = (
+            (summary["period_cluster"] != -1)
+            & (summary["cluster_size"] >= args.emergent_min_cluster_size)
+            & (summary["ticker_count"] >= args.emergent_min_ticker_count)
+            & (summary["filing_count"] >= args.emergent_min_filing_count)
+            & (summary["top_ticker_share"] <= args.emergent_max_top_ticker_share)
+        )
+    return summary
+
+
 def select_interesting_post_clusters(
     summary_df: pd.DataFrame,
     matches_df: pd.DataFrame,
     interesting_match_types: list[str],
     max_clusters: int,
+    args: argparse.Namespace,
 ) -> pd.DataFrame:
-    post_summary = summary_df[summary_df["period_bucket"] == POST_PERIOD].copy()
+    post_summary = ensure_theme_flags(summary_df, args)
+    post_summary = post_summary[post_summary["period_bucket"] == POST_PERIOD].copy()
     merged = post_summary.merge(
         matches_df,
         left_on="period_cluster_label",
@@ -295,10 +364,22 @@ def select_interesting_post_clusters(
     merged["match_type"] = merged["match_type"].fillna("new_post_only")
     merged["match_label"] = merged["match_label"].fillna("New post-only")
     merged["match_priority"] = merged["match_priority"].fillna(0)
+    merged["eligible_period_theme"] = coerce_bool_series(merged["eligible_period_theme"])
+    merged["eligible_emergent_theme"] = coerce_bool_series(merged["eligible_emergent_theme"])
+    merged["eligible_for_narration"] = np.where(
+        merged["match_type"] == EMERGENT_MATCH_TYPE,
+        merged["eligible_emergent_theme"],
+        merged["eligible_period_theme"],
+    )
+    merged["narration_filter"] = np.where(
+        merged["match_type"] == EMERGENT_MATCH_TYPE,
+        "emergent_discovery",
+        "broad_structural",
+    )
 
     interesting = merged[
         (merged["period_cluster"] != -1)
-        & (merged["eligible_period_theme"].fillna(False))
+        & (merged["eligible_for_narration"].fillna(False))
         & (merged["match_type"].isin(interesting_match_types))
     ].copy()
 
@@ -667,6 +748,7 @@ def build_cluster_prompt(cluster_package: dict[str, Any]) -> str:
             Additional focus for this cluster:
             - Treat this first as a discovery question, not as a forced comparison question.
             - Ask whether this looks like a genuinely emergent post-2022 disclosure theme with breadth across firms and filings.
+            - A post-only cluster can still be analytically important even if it is somewhat narrower than the broad structural-comparison clusters, as long as it is not just one-firm language.
             - If the cluster seems broad and coherent, say what became newly explicit after 2022.
             - If the cluster instead looks like firm-specific wording, boilerplate drift, or a weak novelty claim, say that clearly.
             - Do not force a pre-2022 analogue if the evidence package suggests there is none.
@@ -738,6 +820,7 @@ def build_abstract_prompt(
         - The data come from legally cautious corporate filings, so boilerplate and strategic emphasis matter.
         - You should summarize only the strongest major findings supported by the supplied cluster analyses.
         - Broad post-only clusters can be findings in their own right; if they are well-supported, treat them as discoveries rather than as leftovers from comparison.
+        - Broad structural-comparison clusters and emergent discovery clusters do not use identical narration filters here; emergent clusters are allowed to be somewhat narrower as long as they still span multiple firms and filings.
         - Do not claim one-to-one cluster identity across periods.
         - Use careful language such as "post-2022 disclosures appear to..." or "the post period shows a more explicit subtheme around..."
         - The abstract should synthesize the major findings across the interesting changed clusters, not repeat every detail.
@@ -757,6 +840,7 @@ def build_report_context(
     summary_df: pd.DataFrame,
     interesting_df: pd.DataFrame,
     matches_df: pd.DataFrame,
+    args: argparse.Namespace,
 ) -> dict[str, Any]:
     pre_summary = summary_df[summary_df["period_bucket"] == PRE_PERIOD].copy()
     post_summary = summary_df[summary_df["period_bucket"] == POST_PERIOD].copy()
@@ -793,6 +877,20 @@ def build_report_context(
         "emergent_cluster_count": int((interesting_df["match_type"] == EMERGENT_MATCH_TYPE).sum()) if not interesting_df.empty else 0,
         "interesting_cluster_rows": interesting_rows,
         "emergent_cluster_rows": [row for row in interesting_rows if row.get("match_type") == EMERGENT_MATCH_TYPE],
+        "narration_filters": {
+            "structural": {
+                "min_cluster_size": FOCUS_MIN_CLUSTER_SIZE,
+                "min_ticker_count": FOCUS_MIN_TICKER_COUNT,
+                "min_filing_count": FOCUS_MIN_FILING_COUNT,
+                "max_top_ticker_share": FOCUS_MAX_TOP_TICKER_SHARE,
+            },
+            "emergent": {
+                "min_cluster_size": args.emergent_min_cluster_size,
+                "min_ticker_count": args.emergent_min_ticker_count,
+                "min_filing_count": args.emergent_min_filing_count,
+                "max_top_ticker_share": args.emergent_max_top_ticker_share,
+            },
+        },
         "top_pre_clusters": compact_rows(pre_summary, ["period_cluster_label", "period_share", "cluster_size", "ticker_count", "filing_count", "top_terms"]),
         "top_post_clusters": compact_rows(post_summary, ["period_cluster_label", "period_share", "cluster_size", "ticker_count", "filing_count", "top_terms"]),
         "match_type_counts": matches_df["match_type"].fillna("missing").value_counts().to_dict() if not matches_df.empty else {},
@@ -956,7 +1054,7 @@ def emergent_cluster_figure(interesting_df: pd.DataFrame, template_name: str) ->
     if emergent_df.empty:
         fig = go.Figure()
         fig.add_annotation(
-            text="No broad new post-only clusters met the current narration filters.",
+            text="No post-only clusters met the relaxed emergence screen.",
             x=0.5,
             y=0.5,
             xref="paper",
@@ -1105,7 +1203,7 @@ def main() -> None:
 
     inputs = load_inputs(args)
     sampled_df = inputs["sampled_df"]
-    summary_df = inputs["summary_df"]
+    summary_df = ensure_theme_flags(inputs["summary_df"], args)
     matches_df = inputs["matches_df"]
     pairwise_df = inputs["pairwise_df"]
     representative_df = inputs["representative_df"]
@@ -1124,6 +1222,7 @@ def main() -> None:
         matches_df=matches_df,
         interesting_match_types=interesting_match_types,
         max_clusters=args.max_clusters,
+        args=args,
     )
 
     embedding_model_name = resolve_embedding_model_name(args, metadata)
@@ -1162,6 +1261,7 @@ def main() -> None:
         summary_df=summary_df,
         interesting_df=interesting_df,
         matches_df=matches_df,
+        args=args,
     )
     abstract_data = run_abstract_analysis(
         cluster_packages=cluster_packages,
@@ -1248,6 +1348,10 @@ def main() -> None:
         "embedding_model_name": embedding_model_name,
         "llm_model_name": model_name or "",
         "interesting_match_types": interesting_match_types,
+        "emergent_min_cluster_size": args.emergent_min_cluster_size,
+        "emergent_min_ticker_count": args.emergent_min_ticker_count,
+        "emergent_min_filing_count": args.emergent_min_filing_count,
+        "emergent_max_top_ticker_share": args.emergent_max_top_ticker_share,
         "skip_llm": bool(args.skip_llm),
         "allow_reembed": bool(args.allow_reembed),
         "narrated_clusters": len(cluster_cards),
