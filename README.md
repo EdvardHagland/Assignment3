@@ -16,12 +16,6 @@
   - extracted sections, raw paragraphs, and cleaning reports
 - `data/final/`
   - the one canonical analysis dataset
-- `data/fine_tuning/`
-  - annotation and training-data artifacts built from the final corpus
-- `fine_tuning/`
-  - labeling workflow overview
-- `fine_tuning/labeling/`
-  - the annotation app, config, protocol, codebook, and labeling scripts in one place
 - `analysis/`
   - Colab launch guide, exploratory report pipeline, diagnostics, figures, and interpretation
 - `config/`
@@ -49,27 +43,6 @@ The cleaner moves from filing text to annotation-ready risk claims in several pa
 
 The bullet-list split matters because many firms introduce a lead sentence and then enumerate distinct risks underneath it. In the final dataset, each bullet becomes its own row while the shared lead context is carried forward into the cleaned text.
 
-## Fine-tuning and labeling logic
-
-We are treating the training set as a proper collaborative annotation exercise.
-
-Important distinction:
-
-- the full SEC corpus stays intact as the main analysis dataset
-- the annotation pool is a sampled subset drawn from that corpus
-- the supervised train, validation, and test splits should be created inside the labeled subset later
-
-So no, we do not need to delete labeled rows from the original corpus. We just need to track which rows were sampled for annotation and which labeled rows eventually become part of the supervised dataset.
-
-Rules:
-
-1. no item is single-coded
-2. every item is labeled by at least `2` annotators
-3. disagreements go back into the queue for another labeling round
-4. items with persistent disagreement are dropped from the final training set
-
-The goal is not to keep every row at all costs. The goal is to keep only rows that produce a reliable supervised dataset.
-
 ## Current canonical dataset
 
 Main dataset:
@@ -83,12 +56,6 @@ Supporting reproducibility files:
 - `data/intermediate/processed/sec_10k_risk_coverage_report.csv`
 - `data/intermediate/sec_10k_risk_cleaning_report.csv`
 
-Future training-data products will live in:
-
-- `data/fine_tuning/`
-
-The local annotation database also lives there, because the app is meant to run from your laptop while ngrok exposes it outward.
-
 ## Quick start
 
 Set a SEC-compliant user agent and run:
@@ -99,33 +66,21 @@ python scraper/sec_fetch_risk_factors.py --start-year 2018
 python scraper/prepare_annotation_paragraphs.py
 ```
 
-Then build and serve the annotation workflow:
+Then move into the maintained analysis workflow:
 
-```powershell
-python fine_tuning/labeling/scripts/build_annotation_pool.py
-python fine_tuning/labeling/scripts/init_annotation_db.py --reset
-python fine_tuning/labeling/run_annotation_app.py
-```
-
-If you want to expose it over ngrok, point ngrok at the local Flask port after the app is running.
-
-For backend visibility:
-
-- app dashboard: `http://127.0.0.1:5000/admin`
-- local database file: `data/fine_tuning/annotation.sqlite3`
-- label definitions: `fine_tuning/labeling/config/label_options.json`
-
-The annotator interface is intentionally minimal: users register with an email, see only the text, click one label, and the app advances immediately to the next item.
-
-The current annotation scheme uses `15` defense-specific risk categories. The only catch-all class is `OTHER_UNCLEAR`, which should be used sparingly and treated as a recycle signal rather than a final analytical category.
+- `analysis/COLAB_README.md`
+- `analysis/README.md`
+- `analysis/exploratory_clustering/render_period_shift_report.py`
+- `analysis/exploratory_clustering/render_period_shift_llm_report.py`
 
 ## Next step
 
-The structure is now organized around scraping, one canonical corpus, and one explicit fine-tuning workflow. The next job is to build the fine-tuning dataset from the final corpus without breaking the double-label protocol.
+The current project is centered on one canonical corpus and one maintained analysis path: separate pre/post cluster discovery plus evidence-constrained LLM interpretation. The next job is to tighten the methodological critique and final presentation around that pipeline.
 
 For analysis preparation, start here:
 
 - `analysis/COLAB_README.md`
+- `analysis/README.md`
 - `analysis/exploratory_clustering/render_period_shift_report.py`
 - `analysis/exploratory_clustering/period_shift_template.html.j2`
 - `analysis/exploratory_clustering/render_period_shift_llm_report.py`
