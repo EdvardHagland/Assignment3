@@ -273,14 +273,21 @@
     }
 
     .cluster-card {
-      padding: 22px;
       border-radius: var(--r);
       background: var(--card);
       border: 1px solid var(--line-soft);
       border-top: 4px solid var(--line);
+    }
+
+    article.cluster-card {
+      padding: 22px;
       display: flex;
       flex-direction: column;
       gap: 12px;
+    }
+
+    details.cluster-card {
+      overflow: hidden;
     }
 
     .cluster-card[data-kind="new_post_only"] { border-top-color: var(--accent); }
@@ -288,6 +295,48 @@
     .cluster-card[data-kind="merged"] { border-top-color: var(--warm); }
     .cluster-card[data-kind="persistent"] { border-top-color: var(--olive); }
     .cluster-card[data-kind="approximate_overlap"] { border-top-color: var(--blue); }
+
+    .cluster-summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      position: relative;
+      padding-right: 88px;
+    }
+
+    .cluster-summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .cluster-summary::after {
+      content: "Expand";
+      position: absolute;
+      top: 22px;
+      right: 22px;
+      font-size: 0.68rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    details.cluster-card[open] .cluster-summary {
+      border-bottom: 1px solid var(--line-soft);
+    }
+
+    details.cluster-card[open] .cluster-summary::after {
+      content: "Collapse";
+    }
+
+    .cluster-card-body {
+      padding: 0 22px 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
 
     .cluster-head {
       display: flex;
@@ -308,6 +357,20 @@
       font-weight: 700;
     }
 
+    .cluster-summary-title {
+      margin-top: 4px;
+      font-size: 0.9rem;
+      color: var(--ink-soft);
+      font-weight: 700;
+    }
+
+    .cluster-summary-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
     .badge {
       display: inline-block;
       padding: 4px 10px;
@@ -318,6 +381,44 @@
       text-transform: uppercase;
       background: rgba(15, 76, 92, 0.10);
       color: var(--accent);
+    }
+
+    .summary-chip {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      background: rgba(66, 88, 104, 0.08);
+      color: var(--muted);
+    }
+
+    .cluster-summary-headline {
+      margin: 0;
+      font-size: 0.93rem;
+      color: var(--ink-soft);
+    }
+
+    .cluster-summary-headline strong {
+      color: var(--ink);
+    }
+
+    .summary-inline-stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 14px;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .summary-inline-stats strong {
+      color: var(--faint);
+      font-size: 0.68rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-right: 4px;
     }
 
     .stats {
@@ -494,6 +595,125 @@
     <a href="#catalog">Catalog</a>
   </nav>
 
+  {% macro render_cluster_card(cluster) -%}
+  <details class="cluster-card" data-kind="{{ cluster.match_type }}">
+    <summary class="cluster-summary">
+      <div class="cluster-head">
+        <div>
+          <h3>{{ cluster.post_cluster_label }}</h3>
+          <div class="cluster-summary-title">{{ cluster.analysis.card_title }}</div>
+        </div>
+        <div class="cluster-meta">{{ cluster.cluster_size }} rows<br>{{ cluster.ticker_count }} tickers<br>{{ cluster.filing_count }} filings</div>
+      </div>
+      <div class="cluster-summary-tags">
+        <span class="badge">{{ cluster.match_label }}</span>
+        <span class="summary-chip">{{ cluster.continuity_label }}</span>
+        <span class="summary-chip">{{ cluster.count_gap_role_label }}</span>
+      </div>
+      <p class="cluster-summary-headline"><strong>{{ cluster.analysis.headline }}</strong> {{ cluster.analysis.continuity_note }}</p>
+      <div class="summary-inline-stats">
+        <span><strong>Post share</strong> {{ "%.1f"|format(cluster.period_share * 100) }}%</span>
+        <span><strong>Best cosine</strong> {% if cluster.best_pre_similarity == cluster.best_pre_similarity %}{{ "%.2f"|format(cluster.best_pre_similarity) }}{% else %}n/a{% endif %}</span>
+        <span><strong>Match</strong> {{ cluster.best_pre_cluster_label or "none" }}</span>
+        <span><strong>Confidence</strong> {{ cluster.analysis.confidence }}</span>
+      </div>
+    </summary>
+
+    <div class="cluster-card-body">
+      <div class="analysis-box">
+        <h4>{{ cluster.analysis.card_title }}</h4>
+        <p><strong>{{ cluster.analysis.headline }}</strong> {{ cluster.analysis.interpretation }}</p>
+      </div>
+
+      <div class="stats">
+        <div class="stat-box"><strong>Post share</strong><span>{{ "%.1f"|format(cluster.period_share * 100) }}%</span></div>
+        <div class="stat-box"><strong>Best cosine</strong><span>{% if cluster.best_pre_similarity == cluster.best_pre_similarity %}{{ "%.2f"|format(cluster.best_pre_similarity) }}{% else %}n/a{% endif %}</span></div>
+        <div class="stat-box"><strong>Match</strong><span>{{ cluster.best_pre_cluster_label or "none" }}</span></div>
+        <div class="stat-box"><strong>Confidence</strong><span>{{ cluster.analysis.confidence }}</span></div>
+        <div class="stat-box"><strong>Top-ticker share</strong><span>{{ "%.0f"|format(cluster.top_ticker_share * 100) }}%</span></div>
+        <div class="stat-box"><strong>Prime / Supplier</strong><span>{{ "%.0f"|format(cluster.prime_share * 100) }}% / {{ "%.0f"|format(cluster.supplier_share * 100) }}%</span></div>
+      </div>
+
+      <div class="cluster-text"><strong>Why it was selected</strong> {{ cluster.analysis.why_interesting }}</div>
+      <div class="cluster-text"><strong>Change reading</strong> {{ cluster.continuity_label }}. {{ cluster.analysis.continuity_note }}</div>
+      <div class="cluster-text"><strong>Count-gap role</strong> {{ cluster.count_gap_role_label }}. {{ cluster.analysis.count_gap_note }}</div>
+      {% if cluster.analysis.layer_reading %}
+      <div class="cluster-text"><strong>Prime vs supplier</strong> {{ cluster.analysis.layer_reading }}</div>
+      {% endif %}
+      {% if cluster.analysis.concentration_note %}
+      <div class="cluster-text"><strong>Concentration</strong> {{ cluster.analysis.concentration_note }}</div>
+      {% endif %}
+      {% if cluster.analysis.temporal_reading_post %}
+      <div class="cluster-text"><strong>Temporal trajectory (post)</strong> {{ cluster.analysis.temporal_reading_post }}</div>
+      {% endif %}
+      {% if cluster.analysis.intra_cluster_churn_note %}
+      <div class="cluster-text"><strong>Intra-cluster churn</strong> {{ cluster.analysis.intra_cluster_churn_note }}</div>
+      {% endif %}
+      {% if cluster.analysis.category_blending_note %}
+      <div class="cluster-text"><strong>Category blending</strong> {{ cluster.analysis.category_blending_note }}</div>
+      {% endif %}
+      <div class="cluster-text"><strong>Post terms</strong> {{ cluster.top_terms }}</div>
+      {% if cluster.best_pre_top_terms %}
+      <div class="cluster-text"><strong>Best pre terms</strong> {{ cluster.best_pre_top_terms }}</div>
+      {% endif %}
+      {% if cluster.shared_terms %}
+      <div class="cluster-text"><strong>Shared terms</strong> {{ cluster.shared_terms }}</div>
+      {% endif %}
+      <div class="cluster-text"><strong>Genre caveat</strong> {{ cluster.analysis.genre_caveat }}</div>
+
+      <ul class="bullet-list">
+        {% for point in cluster.analysis.evidence_points %}
+        <li>{{ point }}</li>
+        {% endfor %}
+      </ul>
+
+      <div class="evidence-grid">
+        <details class="evidence-group">
+          <summary>Core post examples ({{ cluster.central_post_examples | length }})</summary>
+          {% for example in cluster.central_post_examples %}
+          <div class="example">
+            <div class="example-meta">{{ example.example_id }} · {{ example.ticker }} · {{ example.company_layer }} · {{ example.filing_year }}</div>
+            <p>{{ example.text_preview }}</p>
+          </div>
+          {% endfor %}
+        </details>
+
+        <details class="evidence-group">
+          <summary>Mid-distance post examples ({{ cluster.mid_post_examples | length }})</summary>
+          {% for example in cluster.mid_post_examples %}
+          <div class="example">
+            <div class="example-meta">{{ example.example_id }} · {{ example.ticker }} · {{ example.company_layer }} · {{ example.filing_year }} · p={{ "%.2f"|format(example.distance_percentile) }}</div>
+            <p>{{ example.text_preview }}</p>
+          </div>
+          {% endfor %}
+        </details>
+
+        <details class="evidence-group">
+          <summary>Peripheral but still member examples ({{ cluster.peripheral_post_examples | length }})</summary>
+          {% for example in cluster.peripheral_post_examples %}
+          <div class="example">
+            <div class="example-meta">{{ example.example_id }} · {{ example.ticker }} · {{ example.company_layer }} · {{ example.filing_year }} · p={{ "%.2f"|format(example.distance_percentile) }}</div>
+            <p>{{ example.text_preview }}</p>
+          </div>
+          {% endfor %}
+        </details>
+
+        {% if cluster.matched_pre_examples %}
+        <details class="evidence-group">
+          <summary>Matched pre-cluster context ({{ cluster.matched_pre_examples | length }})</summary>
+          {% for example in cluster.matched_pre_examples %}
+          <div class="example">
+            <div class="example-meta">{{ example.example_id }} · {{ example.ticker }} · {{ example.company_layer }} · {{ example.filing_year }}</div>
+            <p>{{ example.text_preview }}</p>
+          </div>
+          {% endfor %}
+        </details>
+        {% endif %}
+      </div>
+    </div>
+  </details>
+  {%- endmacro %}
+
   <div class="page">
     <section class="hero" id="overview">
       <div class="eyebrow">LLM-assisted synthesis</div>
@@ -616,104 +836,7 @@
       {% if finding_cards %}
       <div class="clusters">
         {% for cluster in finding_cards %}
-        <article class="cluster-card" data-kind="{{ cluster.match_type }}">
-          <div class="cluster-head">
-            <h3>{{ cluster.post_cluster_label }}</h3>
-            <div class="cluster-meta">{{ cluster.cluster_size }} rows<br>{{ cluster.ticker_count }} tickers<br>{{ cluster.filing_count }} filings</div>
-          </div>
-          <span class="badge">{{ cluster.match_label }}</span>
-
-          <div class="analysis-box">
-            <h4>{{ cluster.analysis.card_title }}</h4>
-            <p><strong>{{ cluster.analysis.headline }}</strong> {{ cluster.analysis.interpretation }}</p>
-          </div>
-
-          <div class="stats">
-            <div class="stat-box"><strong>Post share</strong><span>{{ "%.1f"|format(cluster.period_share * 100) }}%</span></div>
-            <div class="stat-box"><strong>Best cosine</strong><span>{% if cluster.best_pre_similarity == cluster.best_pre_similarity %}{{ "%.2f"|format(cluster.best_pre_similarity) }}{% else %}n/a{% endif %}</span></div>
-            <div class="stat-box"><strong>Match</strong><span>{{ cluster.best_pre_cluster_label or "none" }}</span></div>
-            <div class="stat-box"><strong>Confidence</strong><span>{{ cluster.analysis.confidence }}</span></div>
-            <div class="stat-box"><strong>Top-ticker share</strong><span>{{ "%.0f"|format(cluster.top_ticker_share * 100) }}%</span></div>
-            <div class="stat-box"><strong>Prime / Supplier</strong><span>{{ "%.0f"|format(cluster.prime_share * 100) }}% / {{ "%.0f"|format(cluster.supplier_share * 100) }}%</span></div>
-          </div>
-
-          <div class="cluster-text"><strong>Why it was selected</strong> {{ cluster.analysis.why_interesting }}</div>
-          <div class="cluster-text"><strong>Change reading</strong> {{ cluster.continuity_label }}. {{ cluster.analysis.continuity_note }}</div>
-          <div class="cluster-text"><strong>Count-gap role</strong> {{ cluster.count_gap_role_label }}. {{ cluster.analysis.count_gap_note }}</div>
-          {% if cluster.analysis.layer_reading %}
-          <div class="cluster-text"><strong>Prime vs supplier</strong> {{ cluster.analysis.layer_reading }}</div>
-          {% endif %}
-          {% if cluster.analysis.concentration_note %}
-          <div class="cluster-text"><strong>Concentration</strong> {{ cluster.analysis.concentration_note }}</div>
-          {% endif %}
-          {% if cluster.analysis.temporal_reading_post %}
-          <div class="cluster-text"><strong>Temporal trajectory (post)</strong> {{ cluster.analysis.temporal_reading_post }}</div>
-          {% endif %}
-          {% if cluster.analysis.intra_cluster_churn_note %}
-          <div class="cluster-text"><strong>Intra-cluster churn</strong> {{ cluster.analysis.intra_cluster_churn_note }}</div>
-          {% endif %}
-          {% if cluster.analysis.category_blending_note %}
-          <div class="cluster-text"><strong>Category blending</strong> {{ cluster.analysis.category_blending_note }}</div>
-          {% endif %}
-          <div class="cluster-text"><strong>Post terms</strong> {{ cluster.top_terms }}</div>
-          {% if cluster.best_pre_top_terms %}
-          <div class="cluster-text"><strong>Best pre terms</strong> {{ cluster.best_pre_top_terms }}</div>
-          {% endif %}
-          {% if cluster.shared_terms %}
-          <div class="cluster-text"><strong>Shared terms</strong> {{ cluster.shared_terms }}</div>
-          {% endif %}
-          <div class="cluster-text"><strong>Genre caveat</strong> {{ cluster.analysis.genre_caveat }}</div>
-
-          <ul class="bullet-list">
-            {% for point in cluster.analysis.evidence_points %}
-            <li>{{ point }}</li>
-            {% endfor %}
-          </ul>
-
-          <div class="evidence-grid">
-            <details class="evidence-group">
-              <summary>Core post examples ({{ cluster.central_post_examples | length }})</summary>
-              {% for example in cluster.central_post_examples %}
-              <div class="example">
-                <div class="example-meta">{{ example.example_id }} · {{ example.ticker }} · {{ example.company_layer }} · {{ example.filing_year }}</div>
-                <p>{{ example.text_preview }}</p>
-              </div>
-              {% endfor %}
-            </details>
-
-            <details class="evidence-group">
-              <summary>Mid-distance post examples ({{ cluster.mid_post_examples | length }})</summary>
-              {% for example in cluster.mid_post_examples %}
-              <div class="example">
-                <div class="example-meta">{{ example.example_id }} · {{ example.ticker }} · {{ example.company_layer }} · {{ example.filing_year }} · p={{ "%.2f"|format(example.distance_percentile) }}</div>
-                <p>{{ example.text_preview }}</p>
-              </div>
-              {% endfor %}
-            </details>
-
-            <details class="evidence-group">
-              <summary>Peripheral but still member examples ({{ cluster.peripheral_post_examples | length }})</summary>
-              {% for example in cluster.peripheral_post_examples %}
-              <div class="example">
-                <div class="example-meta">{{ example.example_id }} · {{ example.ticker }} · {{ example.company_layer }} · {{ example.filing_year }} · p={{ "%.2f"|format(example.distance_percentile) }}</div>
-                <p>{{ example.text_preview }}</p>
-              </div>
-              {% endfor %}
-            </details>
-
-            {% if cluster.matched_pre_examples %}
-            <details class="evidence-group">
-              <summary>Matched pre-cluster context ({{ cluster.matched_pre_examples | length }})</summary>
-              {% for example in cluster.matched_pre_examples %}
-              <div class="example">
-                <div class="example-meta">{{ example.example_id }} · {{ example.ticker }} · {{ example.company_layer }} · {{ example.filing_year }}</div>
-                <p>{{ example.text_preview }}</p>
-              </div>
-              {% endfor %}
-            </details>
-            {% endif %}
-          </div>
-        </article>
+        {{ render_cluster_card(cluster) }}
         {% endfor %}
       </div>
       {% else %}
@@ -727,104 +850,7 @@
       {% if baseline_cards %}
       <div class="clusters">
         {% for cluster in baseline_cards %}
-        <article class="cluster-card" data-kind="{{ cluster.match_type }}">
-          <div class="cluster-head">
-            <h3>{{ cluster.post_cluster_label }}</h3>
-            <div class="cluster-meta">{{ cluster.cluster_size }} rows<br>{{ cluster.ticker_count }} tickers<br>{{ cluster.filing_count }} filings</div>
-          </div>
-          <span class="badge">{{ cluster.match_label }}</span>
-
-          <div class="analysis-box">
-            <h4>{{ cluster.analysis.card_title }}</h4>
-            <p><strong>{{ cluster.analysis.headline }}</strong> {{ cluster.analysis.interpretation }}</p>
-          </div>
-
-          <div class="stats">
-            <div class="stat-box"><strong>Post share</strong><span>{{ "%.1f"|format(cluster.period_share * 100) }}%</span></div>
-            <div class="stat-box"><strong>Best cosine</strong><span>{% if cluster.best_pre_similarity == cluster.best_pre_similarity %}{{ "%.2f"|format(cluster.best_pre_similarity) }}{% else %}n/a{% endif %}</span></div>
-            <div class="stat-box"><strong>Match</strong><span>{{ cluster.best_pre_cluster_label or "none" }}</span></div>
-            <div class="stat-box"><strong>Confidence</strong><span>{{ cluster.analysis.confidence }}</span></div>
-            <div class="stat-box"><strong>Top-ticker share</strong><span>{{ "%.0f"|format(cluster.top_ticker_share * 100) }}%</span></div>
-            <div class="stat-box"><strong>Prime / Supplier</strong><span>{{ "%.0f"|format(cluster.prime_share * 100) }}% / {{ "%.0f"|format(cluster.supplier_share * 100) }}%</span></div>
-          </div>
-
-          <div class="cluster-text"><strong>Why it was selected</strong> {{ cluster.analysis.why_interesting }}</div>
-          <div class="cluster-text"><strong>Change reading</strong> {{ cluster.continuity_label }}. {{ cluster.analysis.continuity_note }}</div>
-          <div class="cluster-text"><strong>Count-gap role</strong> {{ cluster.count_gap_role_label }}. {{ cluster.analysis.count_gap_note }}</div>
-          {% if cluster.analysis.layer_reading %}
-          <div class="cluster-text"><strong>Prime vs supplier</strong> {{ cluster.analysis.layer_reading }}</div>
-          {% endif %}
-          {% if cluster.analysis.concentration_note %}
-          <div class="cluster-text"><strong>Concentration</strong> {{ cluster.analysis.concentration_note }}</div>
-          {% endif %}
-          {% if cluster.analysis.temporal_reading_post %}
-          <div class="cluster-text"><strong>Temporal trajectory (post)</strong> {{ cluster.analysis.temporal_reading_post }}</div>
-          {% endif %}
-          {% if cluster.analysis.intra_cluster_churn_note %}
-          <div class="cluster-text"><strong>Intra-cluster churn</strong> {{ cluster.analysis.intra_cluster_churn_note }}</div>
-          {% endif %}
-          {% if cluster.analysis.category_blending_note %}
-          <div class="cluster-text"><strong>Category blending</strong> {{ cluster.analysis.category_blending_note }}</div>
-          {% endif %}
-          <div class="cluster-text"><strong>Post terms</strong> {{ cluster.top_terms }}</div>
-          {% if cluster.best_pre_top_terms %}
-          <div class="cluster-text"><strong>Best pre terms</strong> {{ cluster.best_pre_top_terms }}</div>
-          {% endif %}
-          {% if cluster.shared_terms %}
-          <div class="cluster-text"><strong>Shared terms</strong> {{ cluster.shared_terms }}</div>
-          {% endif %}
-          <div class="cluster-text"><strong>Genre caveat</strong> {{ cluster.analysis.genre_caveat }}</div>
-
-          <ul class="bullet-list">
-            {% for point in cluster.analysis.evidence_points %}
-            <li>{{ point }}</li>
-            {% endfor %}
-          </ul>
-
-          <div class="evidence-grid">
-            <details class="evidence-group">
-              <summary>Core post examples ({{ cluster.central_post_examples | length }})</summary>
-              {% for example in cluster.central_post_examples %}
-              <div class="example">
-                <div class="example-meta">{{ example.example_id }} · {{ example.ticker }} · {{ example.company_layer }} · {{ example.filing_year }}</div>
-                <p>{{ example.text_preview }}</p>
-              </div>
-              {% endfor %}
-            </details>
-
-            <details class="evidence-group">
-              <summary>Mid-distance post examples ({{ cluster.mid_post_examples | length }})</summary>
-              {% for example in cluster.mid_post_examples %}
-              <div class="example">
-                <div class="example-meta">{{ example.example_id }} · {{ example.ticker }} · {{ example.company_layer }} · {{ example.filing_year }} · p={{ "%.2f"|format(example.distance_percentile) }}</div>
-                <p>{{ example.text_preview }}</p>
-              </div>
-              {% endfor %}
-            </details>
-
-            <details class="evidence-group">
-              <summary>Peripheral but still member examples ({{ cluster.peripheral_post_examples | length }})</summary>
-              {% for example in cluster.peripheral_post_examples %}
-              <div class="example">
-                <div class="example-meta">{{ example.example_id }} · {{ example.ticker }} · {{ example.company_layer }} · {{ example.filing_year }} · p={{ "%.2f"|format(example.distance_percentile) }}</div>
-                <p>{{ example.text_preview }}</p>
-              </div>
-              {% endfor %}
-            </details>
-
-            {% if cluster.matched_pre_examples %}
-            <details class="evidence-group">
-              <summary>Matched pre-cluster context ({{ cluster.matched_pre_examples | length }})</summary>
-              {% for example in cluster.matched_pre_examples %}
-              <div class="example">
-                <div class="example-meta">{{ example.example_id }} · {{ example.ticker }} · {{ example.company_layer }} · {{ example.filing_year }}</div>
-                <p>{{ example.text_preview }}</p>
-              </div>
-              {% endfor %}
-            </details>
-            {% endif %}
-          </div>
-        </article>
+        {{ render_cluster_card(cluster) }}
         {% endfor %}
       </div>
       {% else %}
