@@ -490,7 +490,7 @@
     <a href="#question">Question & Method</a>
     <a href="#answer">Answer</a>
     <a href="#clusters">Findings</a>
-    <a href="#corpus">Method Appendix</a>
+    <a href="#appendix">Appendix</a>
     <a href="#catalog">Catalog</a>
   </nav>
 
@@ -599,64 +599,6 @@
       </div>
       {% endif %}
       <p><strong>Caution:</strong> {{ abstract_data.closing_caution }}</p>
-    </section>
-
-    <section class="section" id="corpus">
-      <div class="section-header">
-        <h2>Method Appendix: Corpus and Clustering Base</h2>
-        <p>This appendix keeps the evidence trail visible. The Gemini layer sits on top of these artifacts; it does not replace the separate-clustering workflow.</p>
-      </div>
-      <div class="grid-2">
-        <div class="figure-card">{{ figures.corpus_overview | safe }}</div>
-        <div class="figure-card">{{ figures.sample_mix | safe }}</div>
-      </div>
-    </section>
-
-    <section class="section" id="discovery">
-      <div class="section-header">
-        <h2>Method Appendix: Separate Cluster Discovery</h2>
-        <p>The same embedding space is used for both periods, but cluster discovery is run separately so the method can detect thematic splitting, refinement, or newly explicit subthemes rather than forcing one global cluster map.</p>
-      </div>
-      <div class="grid-2">
-        <div class="figure-card" style="grid-column: 1 / -1;">{{ figures.shared_umap_period | safe }}</div>
-        <div class="figure-card">{{ figures.pre_cluster_space | safe }}</div>
-        <div class="figure-card">{{ figures.post_cluster_space | safe }}</div>
-        <div class="figure-card">{{ figures.pre_cluster_share | safe }}</div>
-        <div class="figure-card">{{ figures.post_cluster_share | safe }}</div>
-      </div>
-    </section>
-
-    <section class="section" id="emergence">
-      <div class="section-header">
-        <h2>Method Appendix: Change Categories</h2>
-        <p>Emergence is not defined only as centroid mismatch. A post cluster can count as a substantive discovery only if the evidence suggests genuine novelty, while many of the most interesting results in this run instead look like split/refined themes or stable families with shifted contents.</p>
-      </div>
-      <div class="grid-2">
-        <div class="figure-card">{{ figures.emergent_clusters | safe }}</div>
-        <div class="figure-card">{{ figures.content_shift_clusters | safe }}</div>
-      </div>
-    </section>
-
-    <section class="section" id="matching">
-      <div class="section-header">
-        <h2>Method Appendix: Approximate Pre/Post Matching</h2>
-        <p>Approximate matching is used to ask which post clusters look persistent, split/refined, or merged relative to the pre system. It is useful for interpretation, but it is not treated as proof of one-to-one cluster identity.</p>
-      </div>
-      <div class="grid-2">
-        <div class="figure-card" style="grid-column: 1 / -1;">{{ figures.match_heatmap | safe }}</div>
-        <div class="figure-card" style="grid-column: 1 / -1;">{{ figures.post_match_status | safe }}</div>
-      </div>
-    </section>
-
-    <section class="section" id="selection">
-      <div class="section-header">
-        <h2>Method Appendix: Which Clusters Were Narrated</h2>
-        <p>Only post-2022 clusters that already looked analytically interesting from the period-shift artifacts were passed to Gemini. Broad changed themes were prioritized, and a small audit set of broad persistent clusters was added as controls so the report could distinguish thematic change from stable legal boilerplate.</p>
-      </div>
-      <div class="grid-2">
-        <div class="figure-card">{{ figures.interesting_clusters | safe }}</div>
-        <div class="figure-card">{{ figures.analysis_confidence | safe }}</div>
-      </div>
     </section>
 
     <section class="section" id="clusters">
@@ -888,14 +830,28 @@
       {% else %}
       <div class="empty-note">No narrated clusters were judged to function mainly as stable baselines in this run.</div>
       {% endif %}
+    </section>
 
-      <div class="subsection-head" style="margin-top:22px;">
-        <h3>How The Narrated Set Breaks Down</h3>
-        <p>These summary visuals show how the final narrated set separates into genuinely emergent themes, same-family content shifts, and broader structural changes.</p>
+    <section class="section" id="appendix">
+      <div class="section-header">
+        <h2>Method Appendix</h2>
+        <p>This appendix keeps only the figures that clarify the method and support the main interpretation: one shared map, the separate pre/post cluster spaces, and a compact matching summary.</p>
+      </div>
+      <div class="subsection-head">
+        <h3>Shared Embedding Space, Separate Discovery</h3>
+        <p>The same embedding space is used for both periods, but cluster discovery is run separately so the method can detect thematic splitting, refinement, and newly explicit subthemes instead of forcing one global cluster map.</p>
       </div>
       <div class="grid-2">
-        <div class="figure-card">{{ figures.emergent_clusters | safe }}</div>
-        <div class="figure-card">{{ figures.content_shift_clusters | safe }}</div>
+        <div class="figure-card" style="grid-column: 1 / -1;">{{ figures.shared_umap_period | safe }}</div>
+        <div class="figure-card">{{ figures.pre_cluster_space | safe }}</div>
+        <div class="figure-card">{{ figures.post_cluster_space | safe }}</div>
+      </div>
+      <div class="subsection-head" style="margin-top: 22px;">
+        <h3>Approximate Pre/Post Matching</h3>
+        <p>Approximate matching is used to ask which post clusters look persistent, split/refined, or merged relative to the pre system. It informs interpretation, but it is not treated as proof of one-to-one cluster identity.</p>
+      </div>
+      <div class="grid-2">
+        <div class="figure-card" style="grid-column: 1 / -1;">{{ figures.post_match_status | safe }}</div>
       </div>
     </section>
 

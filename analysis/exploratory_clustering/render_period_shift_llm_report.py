@@ -43,12 +43,8 @@ from render_period_shift_report import (
     MATCH_TYPE_PRIORITY,
     PERIOD_META,
     build_display_sample,
-    corpus_overview_figure,
-    match_heatmap_figure,
-    period_cluster_share_figure,
     period_cluster_space_figure,
     post_match_status_figure,
-    sample_mix_figure,
     shared_umap_period_figure,
 )
 
@@ -2187,19 +2183,10 @@ def main() -> None:
     figure_objects = {
         "cluster_count_shift": cluster_count_shift_figure(summary_df, template_name),
         "period_text_density": period_text_density_figure(sampled_df, template_name),
-        "corpus_overview": corpus_overview_figure(full_df, template_name),
-        "sample_mix": sample_mix_figure(sampled_df, template_name),
         "shared_umap_period": shared_umap_period_figure(global_display_df, template_name),
         "pre_cluster_space": period_cluster_space_figure(pre_display_df, PRE_PERIOD, template_name),
         "post_cluster_space": period_cluster_space_figure(post_display_df, POST_PERIOD, template_name),
-        "pre_cluster_share": period_cluster_share_figure(pre_summary_df, PRE_PERIOD, 10, template_name),
-        "post_cluster_share": period_cluster_share_figure(post_summary_df, POST_PERIOD, 10, template_name),
-        "match_heatmap": match_heatmap_figure(pairwise_df, pre_summary_df, post_summary_df, 10, template_name),
         "post_match_status": post_match_status_figure(post_catalog_df, 10, template_name),
-        "emergent_clusters": emergent_cluster_figure(cluster_cards, template_name),
-        "content_shift_clusters": content_shift_cluster_figure(cluster_cards, template_name),
-        "interesting_clusters": interesting_cluster_figure(interesting_df, template_name),
-        "analysis_confidence": confidence_figure(cluster_cards, template_name),
     }
     figures = {key: render_plot(fig) for key, fig in figure_objects.items()}
 
