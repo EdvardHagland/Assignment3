@@ -2,21 +2,45 @@
 
 This file is a copy-paste guide for launching the project in Google Colab.
 
-The normal path should be:
+## Quick start
+
+Use this path when you want to reproduce the dataset and clustering artifacts.
+After installing dependencies, choose one data source: either load the finished
+dataset already stored in GitHub, or rerun the scraper and cleaner in Colab. The
+Gemini-assisted report is optional because it requires private Colab Secrets.
 
 1. clone the repo
 2. install analysis dependencies
-3. load the finished dataset already stored in GitHub
-4. run the exploratory clustering report script
-5. download the compiled HTML report
+3. choose one data source: included GitHub CSV or regenerated SEC corpus
+4. run basic corpus checks
+5. render the full-corpus period-shift clustering artifacts
+6. download the non-LLM period-shift report
+7. optionally render the Gemini-assisted narrative report if Gemini secrets are available
+8. download `period_shift_llm_report.html` if the optional LLM step was run
 
-The dataset-generation block is included too, but it is optional. In most cases we should skip it and use the finished CSV already in the repository.
+Minimal block sequence:
+
+- Block 1: clone or refresh the repository
+- Block 2: install dependencies
+- Block 3A or 3B: choose and load the dataset
+- Block 4: preview the loaded dataset
+- Block 5: run basic corpus checks
+- Block 6: render the full-corpus period-shift report
+- Block 7: download the period-shift report outputs
+
+Optional LLM sequence:
+
+- Block 8: render the final integrated Gemini-assisted report, requires Colab Secrets
+- Block 9: download the LLM report outputs
+
+For the fastest path, use Block 3A. Use Block 3B only if you want to prove the
+corpus can be regenerated from SEC filings.
 
 ## Recommended Colab runtime
 
 - `Python 3`
-- a `T4 GPU` is already enough for a serious exploratory pass
-- if you land on an `H100`, just keep the same workflow and increase the sample size if you want
+- a `T4 GPU` is enough for the maintained workflow
+- if you land on an `H100`, keep the same full-corpus workflow and expect it to run faster
 
 ## Block 1: Clone or refresh the repository
 
@@ -37,38 +61,50 @@ already exists, it refreshes the checkout instead of failing on a second clone.
 !pip -q install -r analysis/requirements-colab.txt
 ```
 
-## Block 3: Optional dataset generation
+## Block 3: Choose one data source
 
-Skip this block if we just want to analyze the finished dataset already in the repo.
+Run either Block 3A or Block 3B. Both options end by loading the same canonical
+CSV into `df`, so the rest of the notebook is identical after this point.
 
-If we do run it, we need a SEC-compliant user agent.
+### Block 3A: Use the included GitHub dataset
 
-```python
-import os
-
-os.environ["SEC_USER_AGENT"] = "Your Name your.email@example.com"
-```
-
-```python
-!python scraper/sec_fetch_risk_factors.py --start-year 2018
-!python scraper/prepare_annotation_paragraphs.py
-```
-
-This will rebuild:
-
-- `data/intermediate/processed/sec_10k_risk_sections.csv`
-- `data/intermediate/processed/sec_10k_risk_paragraphs.csv`
-- `data/intermediate/sec_10k_risk_cleaning_report.csv`
-- `data/final/sec_defense_risk_dataset.csv`
-
-## Block 4: Load the finished dataset
+This is the recommended quick-start path.
 
 ```python
 import pandas as pd
 
 DATA_PATH = "data/final/sec_defense_risk_dataset.csv"
 df = pd.read_csv(DATA_PATH)
+```
 
+### Block 3B: Regenerate the dataset from SEC filings
+
+Use this path if you want to rerun the scraper and cleaner. You need a
+SEC-compliant user agent before making SEC requests.
+
+```python
+import os
+import pandas as pd
+
+os.environ["SEC_USER_AGENT"] = "Your Name your.email@example.com"
+
+!python scraper/sec_fetch_risk_factors.py --start-year 2018
+!python scraper/prepare_annotation_paragraphs.py
+
+DATA_PATH = "data/final/sec_defense_risk_dataset.csv"
+df = pd.read_csv(DATA_PATH)
+```
+
+Block 3B rebuilds:
+
+- `data/intermediate/processed/sec_10k_risk_sections.csv`
+- `data/intermediate/processed/sec_10k_risk_paragraphs.csv`
+- `data/intermediate/sec_10k_risk_cleaning_report.csv`
+- `data/final/sec_defense_risk_dataset.csv`
+
+## Block 4: Preview the loaded dataset
+
+```python
 print(df.shape)
 df.head(3)
 ```
@@ -86,23 +122,18 @@ display(df.groupby("ticker").size().sort_values(ascending=False).head(15))
 df[["annotation_id", "ticker", "company_layer", "filing_year", "period_bucket", "text"]].sample(5, random_state=42)
 ```
 
-## Block 6: Render the period-shift HTML report and PDF
+## Block 6: Render the full-corpus period-shift report
 
-This is now the recommended exploratory path.
+This is the maintained discovery path for the final report. It embeds the corpus,
+clusters the pre-2022 and post-2022 subsets separately, then writes the artifacts
+that the Gemini-assisted report uses as evidence.
 
 The current default model is `BAAI/bge-m3`.
 
-```python
-!python analysis/exploratory_clustering/render_period_shift_report.py \
-    --model-name BAAI/bge-m3 \
-    --sample-per-period 3000 \
-    --scatter-display-max-points 3500 \
-    --cluster-min-size 80 \
-    --output-html analysis/exploratory_clustering/output/period_shift_report.html \
-    --output-pdf analysis/exploratory_clustering/output/period_shift_report.pdf
-```
-
-For a true full-corpus run, use `--sample-per-period 0`. That tells the script to use all available rows in each period bucket rather than sampling. `--scatter-display-max-points` still only limits how many points are drawn in the browser figures; it does not limit clustering.
+The recommended final run uses the full corpus. `--sample-per-period 0` tells the
+script to use all available rows in each period bucket rather than sampling.
+`--scatter-display-max-points` only limits how many points are drawn in the
+browser figures; it does not limit clustering.
 
 ```python
 !python analysis/exploratory_clustering/render_period_shift_report.py \
@@ -141,27 +172,13 @@ else:
     print("PDF was not generated. Check analysis/exploratory_clustering/output/period_shift_metadata.json for the export error.")
 ```
 
-## What we want from this first pass
+## Block 8: Optional Gemini-assisted report
 
-The first exploratory pass is not meant to produce the final argument. It is meant to help us answer:
-
-- what themes organize the `pre_2022` corpus?
-- what themes organize the `post_2022` corpus?
-- which post clusters look genuinely new versus persistent?
-- where do broad pre themes split into more specific post subthemes?
-- are the largest post clusters broad sector themes or concentrated company artifacts?
-
-## Suggested next steps after the first Colab run
-
-1. Save the most interpretable new and split/refined post clusters.
-2. Read the representative examples for those clusters closely.
-3. Use `cluster_matches.csv` and `pairwise_cluster_similarities.csv` to sanity-check ambiguous mappings.
-4. Pair the thematic-structure findings with filing-level contrastive term or phrase analysis.
-5. Treat the legacy `render_exploratory_report.py` and `render_cluster_diagnostics.py` path as a comparison baseline, not the default workflow.
-
-## Block 8: Render the final integrated Gemini-assisted report
-
-This second-stage pass assumes your Colab runtime already has Colab Secrets named `GEMINI_API_KEY` and `GEMINI_MODEL`, and that you have granted notebook access to them.
+This second-stage pass requires Colab Secrets named `GEMINI_API_KEY` and
+`GEMINI_MODEL`, with notebook access granted to both. A grader should not be
+expected to have these secrets already loaded. If the secrets are unavailable,
+skip Blocks 8 and 9; Blocks 1 through 7 still reproduce the dataset path and the
+non-LLM clustering report.
 
 It does not send one giant prompt. It sends one structured request per interesting post cluster, saves those outputs, then asks Gemini for one abstract on top of the cluster-level analyses.
 
@@ -175,33 +192,26 @@ The selection is strict by default:
 - only the match types you explicitly list in `--interesting-match-types`
 - no fallback to weaker clusters if nothing passes the filter
 
-For a true full narrated run, use `--max-clusters 0` and `--persistent-audit-clusters 0`. That tells the script to include all eligible changed clusters and all eligible persistent audit clusters rather than trimming to a top slice.
+The recommended final run uses `--max-clusters 0` and
+`--persistent-audit-clusters 0`. That tells the script to include all eligible
+changed clusters and all eligible persistent audit clusters rather than trimming
+to a top slice.
 
 ```python
 import os
 from google.colab import userdata
 
-os.environ["GEMINI_API_KEY"] = userdata.get("GEMINI_API_KEY")
-os.environ["GEMINI_MODEL"] = userdata.get("GEMINI_MODEL")
-```
+gemini_api_key = userdata.get("GEMINI_API_KEY")
+gemini_model = userdata.get("GEMINI_MODEL")
 
-```python
-!python analysis/exploratory_clustering/render_period_shift_llm_report.py \
-    --sampled-rows analysis/exploratory_clustering/output/sampled_cluster_rows.csv \
-    --sampled-embeddings analysis/exploratory_clustering/output/sampled_embeddings.npz \
-    --dataset data/final/sec_defense_risk_dataset.csv \
-    --period-cluster-summary analysis/exploratory_clustering/output/period_cluster_summary.csv \
-    --pairwise-similarities analysis/exploratory_clustering/output/pairwise_cluster_similarities.csv \
-    --cluster-matches analysis/exploratory_clustering/output/cluster_matches.csv \
-    --representative-examples analysis/exploratory_clustering/output/representative_examples.csv \
-    --metadata analysis/exploratory_clustering/output/period_shift_metadata.json \
-    --output-html analysis/exploratory_clustering/output/period_shift_llm_report.html \
-    --interesting-match-types new_post_only,split/refined,merged \
-    --max-clusters 6 \
-    --central-examples 4 \
-    --mid-examples 4 \
-    --peripheral-examples 4 \
-    --matched-pre-examples 3
+if not gemini_api_key or not gemini_model:
+    raise RuntimeError(
+        "Block 8 requires Colab Secrets named GEMINI_API_KEY and GEMINI_MODEL. "
+        "Skip Blocks 8 and 9 if you are running without Gemini credentials."
+    )
+
+os.environ["GEMINI_API_KEY"] = gemini_api_key
+os.environ["GEMINI_MODEL"] = gemini_model
 ```
 
 ```python
@@ -234,6 +244,8 @@ This will write:
 - `analysis/exploratory_clustering/output/llm_report_metadata.json`
 
 ## Block 9: Download the LLM report outputs
+
+Run this only if Block 8 completed successfully.
 
 ```python
 from google.colab import files
