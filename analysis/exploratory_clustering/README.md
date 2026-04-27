@@ -21,7 +21,7 @@ This is now the recommended exploratory path. It:
 - summarizes each cluster with terms, representative examples, company breadth, and filing breadth
 - matches post clusters back to the pre system approximately using centroid cosine similarity and term overlap
 
-Optional narrative synthesis layer:
+Gemini-assisted qualitative synthesis layer:
 
 - [render_period_shift_llm_report.py](/C:/Users/edvar/Assignment3/analysis/exploratory_clustering/render_period_shift_llm_report.py)
 - [period_shift_llm_template.html.j2](/C:/Users/edvar/Assignment3/analysis/exploratory_clustering/period_shift_llm_template.html.j2)

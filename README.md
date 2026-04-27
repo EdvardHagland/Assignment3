@@ -50,9 +50,9 @@ Assignment3/
         ├── render_period_shift_report.py
         │   Full-corpus or sampled pre/post clustering and matching report.
         ├── period_shift_template.html.j2
-        │   Template for the non-LLM period-shift report.
+        │   Template for the period-shift clustering report.
         ├── render_period_shift_llm_report.py
-        │   Optional Gemini-assisted narrative report built from saved artifacts.
+        │   Gemini-assisted qualitative report built from saved artifacts.
         ├── period_shift_llm_template.html.j2
         │   Template for the Gemini-assisted report.
         ├── render_exploratory_report.py
@@ -104,9 +104,9 @@ For the easiest Colab path, import:
 
 - `analysis/COLAB_README.ipynb`
 
-The notebook lets the runner either load the included GitHub dataset or regenerate the dataset from SEC filings. The Gemini-assisted report step is optional and requires the runner's own Colab Secrets for `GEMINI_API_KEY` and `GEMINI_MODEL`.
+The notebook lets the runner either load the included GitHub dataset or regenerate the dataset from SEC filings. The Gemini-assisted qualitative report requires Colab Secrets for `GEMINI_API_KEY` and `GEMINI_MODEL`.
 
-For local dataset regeneration, set a SEC-compliant user agent and run:
+For local dataset regeneration, run:
 
 ```powershell
 $env:SEC_USER_AGENT="Your Name your.email@example.com"
