@@ -27,24 +27,12 @@ Assignment3/
 │   │   │   Canonical dataset used by the analysis workflow.
 │   │   └── data_dictionary.md
 │   │       Column definitions for the final dataset.
-│   └── intermediate/
-│       ├── sec_10k_risk_cleaning_report.csv
-│       │   Summary of rows dropped, merged, split, and retained.
-│       └── processed/
-│           ├── sec_10k_risk_sections.csv
-│           │   Extracted filing-level Item 1A sections.
-│           ├── sec_10k_risk_paragraphs.csv
-│           │   Paragraph-level extract before final cleaning.
-│           └── sec_10k_risk_coverage_report.csv
-│               Filing coverage and extraction status by company.
 └── analysis/
     ├── README.md
     ├── COLAB_README.ipynb
     │   Importable Google Colab run guide.
     ├── requirements-colab.txt
     │   Python dependencies for the Colab analysis workflow.
-    ├── METHODOLOGICAL_CRITIQUE.md
-    │   Methodological notes on the embedding, clustering, and LLM workflow.
     └── exploratory_clustering/
         ├── README.md
         ├── render_period_shift_report.py
@@ -53,14 +41,8 @@ Assignment3/
         │   Template for the period-shift clustering report.
         ├── render_period_shift_llm_report.py
         │   Gemini-assisted qualitative report built from saved artifacts.
-        ├── period_shift_llm_template.html.j2
-        │   Template for the Gemini-assisted report.
-        ├── render_exploratory_report.py
-        │   Legacy single-map clustering workflow.
-        ├── report_template.html.j2
-        │   Template for the legacy exploratory report.
-        └── render_cluster_diagnostics.py
-            Diagnostics for legacy global-clustering artifacts.
+        └── period_shift_llm_template.html.j2
+            Template for the Gemini-assisted report.
 ```
 
 ## Corpus logic
@@ -85,18 +67,15 @@ The cleaner moves from filing text to annotation-ready risk claims in several pa
 
 The bullet-list split matters because many firms introduce a lead sentence and then enumerate distinct risks underneath it. In the final dataset, each bullet becomes its own row while the shared lead context is carried forward into the cleaned text.
 
-## Current canonical dataset
+## Current Canonical Dataset
 
 Main dataset:
 
 - `data/final/sec_defense_risk_dataset.csv`
 
-Supporting reproducibility files:
-
-- `data/intermediate/processed/sec_10k_risk_sections.csv`
-- `data/intermediate/processed/sec_10k_risk_paragraphs.csv`
-- `data/intermediate/processed/sec_10k_risk_coverage_report.csv`
-- `data/intermediate/sec_10k_risk_cleaning_report.csv`
+The scraper and cleaner regenerate intermediate CSVs under `data/intermediate/`.
+Those generated files are ignored so the repository stays focused on the source
+code, company configuration, final dataset, and run guide.
 
 ## Quick start
 

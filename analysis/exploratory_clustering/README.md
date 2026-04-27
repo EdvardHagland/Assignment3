@@ -4,10 +4,10 @@ This folder contains the maintained exploratory clustering workflow for pre/post
 
 Current purpose:
 
-- prepare for a first exploratory clustering pass
 - compare `pre_2022` versus `post_2022`
-- inspect representative examples before we lock in stronger analytical claims
-- track how the thematic structure changed, not just which rows move in one shared cluster map
+- render the full-corpus period-shift clustering report
+- save reusable cluster, match, example, and embedding artifacts
+- run the Gemini-assisted qualitative synthesis from those artifacts
 
 Primary report pipeline:
 
@@ -34,15 +34,6 @@ This second-stage pass:
 - sends one Gemini request per cluster
 - asks Gemini for a critical report abstract on top of those structured cluster analyses
 
-Legacy single-map pipeline:
-
-- [render_exploratory_report.py](/C:/Users/edvar/Assignment3/analysis/exploratory_clustering/render_exploratory_report.py)
-- [report_template.html.j2](/C:/Users/edvar/Assignment3/analysis/exploratory_clustering/report_template.html.j2)
-
-These older files are still available if we want to compare against the one-global-cluster-map approach.
-
-Secondary diagnostics pass:
-
-- [render_cluster_diagnostics.py](/C:/Users/edvar/Assignment3/analysis/exploratory_clustering/render_cluster_diagnostics.py)
-
-This diagnostics script is tied to the legacy global-clustering artifacts. It is not the default follow-up for the separate-discovery workflow.
+Generated outputs are written to `analysis/exploratory_clustering/output/`.
+That directory is ignored by Git because the reports and CSV artifacts are
+recreated by the Colab notebook or by rerunning the scripts locally.

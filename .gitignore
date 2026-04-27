@@ -1,4 +1,7 @@
 __pycache__/
-*.pyc
+*.py[cod]
+.ipynb_checkpoints/
+analysis/exploratory_clustering/output/
+data/intermediate/
 data/processed/
 data/sec_defense_risk_corpus/
