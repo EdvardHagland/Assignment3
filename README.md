@@ -1,25 +1,67 @@
 # Assignment 3
 
-## Project
-
 **Title:** Corporate Anxiety After 2022: Risk Narratives in Defense-Sector Filings
 
 **Core question:** Which kinds of strategic risk dominate defense-sector risk disclosures after 2022, and how do those patterns vary across firms and over time?
 
 **Main comparison window:** `2018-2021` versus `2022-2025`
 
-## Repository structure
+## Repository Map
 
-- `scraper/`
-  - SEC scraping and cleaning scripts
-- `data/intermediate/`
-  - extracted sections, raw paragraphs, and cleaning reports
-- `data/final/`
-  - the one canonical analysis dataset
-- `analysis/`
-  - Colab launch guide, exploratory report pipeline, diagnostics, figures, and interpretation
-- `config/`
-  - firm universe and project configuration
+```text
+Assignment3/
+├── README.md
+├── config/
+│   └── defense_companies.csv
+│       Firm universe with ticker, company name, prime/supplier layer, and notes.
+├── scraper/
+│   ├── README.md
+│   ├── sec_fetch_risk_factors.py
+│   │   Resolves configured firms through SEC data, downloads 10-K filings,
+│   │   extracts Item 1A, and writes section and paragraph files.
+│   └── prepare_annotation_paragraphs.py
+│       Cleans extracted paragraphs into final annotation-ready rows.
+├── data/
+│   ├── final/
+│   │   ├── sec_defense_risk_dataset.csv
+│   │   │   Canonical dataset used by the analysis workflow.
+│   │   └── data_dictionary.md
+│   │       Column definitions for the final dataset.
+│   └── intermediate/
+│       ├── sec_10k_risk_cleaning_report.csv
+│       │   Summary of rows dropped, merged, split, and retained.
+│       └── processed/
+│           ├── sec_10k_risk_sections.csv
+│           │   Extracted filing-level Item 1A sections.
+│           ├── sec_10k_risk_paragraphs.csv
+│           │   Paragraph-level extract before final cleaning.
+│           └── sec_10k_risk_coverage_report.csv
+│               Filing coverage and extraction status by company.
+└── analysis/
+    ├── README.md
+    ├── COLAB_README.ipynb
+    │   Importable Google Colab run guide.
+    ├── requirements-colab.txt
+    │   Python dependencies for the Colab analysis workflow.
+    ├── METHODOLOGICAL_CRITIQUE.md
+    │   Methodological notes on the embedding, clustering, and LLM workflow.
+    └── exploratory_clustering/
+        ├── README.md
+        ├── render_period_shift_report.py
+        │   Full-corpus or sampled pre/post clustering and matching report.
+        ├── period_shift_template.html.j2
+        │   Template for the non-LLM period-shift report.
+        ├── render_period_shift_llm_report.py
+        │   Optional Gemini-assisted narrative report built from saved artifacts.
+        ├── period_shift_llm_template.html.j2
+        │   Template for the Gemini-assisted report.
+        ├── render_exploratory_report.py
+        │   Legacy single-map clustering workflow.
+        ├── report_template.html.j2
+        │   Template for the legacy exploratory report.
+        └── render_cluster_diagnostics.py
+            Diagnostics for legacy global-clustering artifacts.
+```
 
 ## Corpus logic
 
@@ -58,7 +100,13 @@ Supporting reproducibility files:
 
 ## Quick start
 
-Set a SEC-compliant user agent and run:
+For the easiest Colab path, import:
+
+- `analysis/COLAB_README.ipynb`
+
+The notebook lets the runner either load the included GitHub dataset or regenerate the dataset from SEC filings. The Gemini-assisted report step is optional and requires the runner's own Colab Secrets for `GEMINI_API_KEY` and `GEMINI_MODEL`.
+
+For local dataset regeneration, set a SEC-compliant user agent and run:
 
 ```powershell
 $env:SEC_USER_AGENT="Your Name your.email@example.com"
@@ -68,26 +116,8 @@ python scraper/prepare_annotation_paragraphs.py
 
 Then move into the maintained analysis workflow:
 
-- `analysis/COLAB_README.md`
+- `analysis/COLAB_README.ipynb`
 - `analysis/README.md`
 - `analysis/exploratory_clustering/render_period_shift_report.py`
 - `analysis/exploratory_clustering/render_period_shift_llm_report.py`
-
-## Next step
-
-The current project is centered on one canonical corpus and one maintained analysis path: separate pre/post cluster discovery plus evidence-constrained LLM interpretation. The next job is to tighten the methodological critique and final presentation around that pipeline.
-
-For analysis preparation, start here:
-
-- `analysis/COLAB_README.md`
-- `analysis/README.md`
-- `analysis/exploratory_clustering/render_period_shift_report.py`
-- `analysis/exploratory_clustering/period_shift_template.html.j2`
-- `analysis/exploratory_clustering/render_period_shift_llm_report.py`
-- `analysis/exploratory_clustering/period_shift_llm_template.html.j2`
-- `analysis/exploratory_clustering/render_exploratory_report.py`
-- `analysis/exploratory_clustering/report_template.html.j2`
-- `analysis/exploratory_clustering/render_cluster_diagnostics.py`
-- `analysis/exploratory_clustering/`
-
 
