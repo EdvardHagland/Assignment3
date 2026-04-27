@@ -61,6 +61,7 @@ MATCH_TYPE_PRIORITY = {
     "approximate_overlap": 4,
 }
 
+AUTO_EMBEDDING_BATCH_SIZES = (256, 192, 128, 96, 64, 48, 32, 16, 8, 4, 1)
 FOCUS_MIN_CLUSTER_SIZE = 150
 FOCUS_MIN_TICKER_COUNT = 10
 FOCUS_MIN_FILING_COUNT = 10
@@ -79,6 +80,19 @@ class PeriodDiscovery:
     representative_df: pd.DataFrame
     display_df: pd.DataFrame
     centroids: Dict[int, np.ndarray]
+
+
+def batch_size_arg(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized == "auto":
+        return normalized
+    try:
+        batch_size = int(normalized)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("--batch-size must be a positive integer or 'auto'.") from exc
+    if batch_size < 1:
+        raise argparse.ArgumentTypeError("--batch-size must be a positive integer or 'auto'.")
+    return str(batch_size)
 
 
 def parse_args() -> argparse.Namespace:
@@ -118,9 +132,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--batch-size",
-        type=int,
-        default=64,
-        help="Embedding batch size.",
+        type=batch_size_arg,
+        default="auto",
+        help="Embedding batch size. Use 'auto' to try larger CUDA batches and step down on OOM.",
     )
     parser.add_argument(
         "--random-state",
@@ -299,15 +313,90 @@ def build_display_sample(df: pd.DataFrame, max_points: int, random_state: int, g
     return display_df
 
 
-def embed_texts(df: pd.DataFrame, model_name: str, batch_size: int) -> np.ndarray:
-    model = SentenceTransformer(model_name)
+def cuda_is_available() -> bool:
+    try:
+        import torch
+    except Exception:
+        return False
+    return bool(torch.cuda.is_available())
+
+
+def clear_cuda_cache() -> None:
+    try:
+        import torch
+    except Exception:
+        return
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
+def is_cuda_oom(exc: BaseException) -> bool:
+    message = f"{type(exc).__name__}: {exc}".lower()
+    return "outofmemoryerror" in message or ("cuda" in message and "out of memory" in message)
+
+
+def embedding_batch_candidates(text_count: int) -> List[int]:
+    candidates: List[int] = []
+    for candidate in AUTO_EMBEDDING_BATCH_SIZES:
+        bounded_candidate = min(candidate, max(text_count, 1))
+        if bounded_candidate not in candidates:
+            candidates.append(bounded_candidate)
+    return candidates
+
+
+def longest_text_warmup(texts: List[str], batch_size: int) -> List[str]:
+    return sorted(texts, key=len, reverse=True)[:batch_size]
+
+
+def encode_text_batch(model: SentenceTransformer, texts: List[str], batch_size: int, show_progress_bar: bool) -> np.ndarray:
     embeddings = model.encode(
-        df["text"].tolist(),
+        texts,
         batch_size=batch_size,
-        show_progress_bar=True,
+        show_progress_bar=show_progress_bar,
         normalize_embeddings=True,
     )
     return np.asarray(embeddings)
+
+
+def encode_with_batch_stepdown(model: SentenceTransformer, texts: List[str], initial_batch_size: int) -> tuple[np.ndarray, int]:
+    batch_size = min(initial_batch_size, max(len(texts), 1))
+    while True:
+        try:
+            print(f"Embedding {len(texts):,} rows at batch size {batch_size}.")
+            return encode_text_batch(model, texts, batch_size, show_progress_bar=True), batch_size
+        except Exception as exc:
+            if batch_size == 1 or not is_cuda_oom(exc):
+                raise
+            next_batch_size = max(1, batch_size // 2)
+            print(f"Batch size {batch_size} exceeded CUDA memory; retrying at {next_batch_size}.")
+            clear_cuda_cache()
+            batch_size = next_batch_size
+
+
+def encode_with_auto_batch(model: SentenceTransformer, texts: List[str]) -> tuple[np.ndarray, int]:
+    if not cuda_is_available():
+        return encode_with_batch_stepdown(model, texts, initial_batch_size=64)
+
+    for batch_size in embedding_batch_candidates(len(texts)):
+        try:
+            print(f"Trying CUDA embedding batch size {batch_size}.")
+            encode_text_batch(model, longest_text_warmup(texts, batch_size), batch_size, show_progress_bar=False)
+            clear_cuda_cache()
+            return encode_text_batch(model, texts, batch_size, show_progress_bar=True), batch_size
+        except Exception as exc:
+            if batch_size == 1 or not is_cuda_oom(exc):
+                raise
+            print(f"Batch size {batch_size} exceeded CUDA memory; trying a smaller batch.")
+            clear_cuda_cache()
+    raise RuntimeError("Could not encode texts even with CUDA batch size 1.")
+
+
+def embed_texts(df: pd.DataFrame, model_name: str, batch_size: str) -> tuple[np.ndarray, int]:
+    texts = df["text"].tolist()
+    model = SentenceTransformer(model_name)
+    if batch_size == "auto":
+        return encode_with_auto_batch(model, texts)
+    return encode_with_batch_stepdown(model, texts, initial_batch_size=int(batch_size))
 
 
 def safe_umap_neighbors(requested: int, n_rows: int) -> int:
@@ -1177,7 +1266,7 @@ def main() -> None:
     template_name = build_plotly_template()
     full_df = load_dataset(Path(args.dataset))
     sampled_df = sample_corpus(full_df, args.sample_per_period, args.random_state)
-    embeddings = embed_texts(sampled_df, args.model_name, args.batch_size)
+    embeddings, effective_batch_size = embed_texts(sampled_df, args.model_name, args.batch_size)
     global_coords = project_embeddings(embeddings, args.random_state, args.umap_neighbors, min_dist=0.08)
     sampled_df["global_umap_x"] = global_coords[:, 0]
     sampled_df["global_umap_y"] = global_coords[:, 1]
@@ -1279,6 +1368,8 @@ def main() -> None:
         "artifacts_dir": str(artifacts_dir),
         "sampled_embeddings": str(embeddings_path),
         "model_name": args.model_name,
+        "embedding_batch_size_requested": args.batch_size,
+        "embedding_batch_size_effective": effective_batch_size,
         "sample_per_period": args.sample_per_period,
         "cluster_min_size": args.cluster_min_size,
         "match_threshold": args.match_threshold,
